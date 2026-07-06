@@ -5,12 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gulf Bottom Intel — Tampa Bay → Hudson Offshore</title>
 <link rel="stylesheet" href="libs/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=24">
+<link rel="stylesheet" href="css/style.css?v=28">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🎣</text></svg>">
 </head>
 <body>
 <header>
   <h1>🎣 Gulf Bottom Intel<span class="sub">Tampa Bay → Hudson · 20–80 mi · snapper &amp; grouper</span></h1>
+  <div class="ctl"><label>Region</label><select id="regionSel"></select></div>
   <div class="ctl"><label>Date</label><input type="date" id="dateInp"></div>
   <div class="ctl"><label>Launch</label><select id="launchSel"></select></div>
   <div class="ctl"><label>Max seas</label><input type="number" id="seasInp" min="1" max="8" step="0.5"> <span class="muted small">ft</span></div>
@@ -38,19 +39,22 @@
 <script src="libs/leaflet.js"></script>
 <script src="libs/leaflet-heat.js"></script>
 <script src="libs/suncalc.js"></script>
-<script src="data/core.js?v=24"></script>
-<script src="data/regs.js?v=24"></script>
-<script src="data/science.js?v=24"></script>
-<script src="data/spots.js?v=24"></script>
-<script src="data/zones.js?v=24"></script>
-<script src="data/reports.js?v=24"></script>
-<script src="js/astro.js?v=24"></script>
-<script src="js/conditions.js?v=24"></script>
-<script src="js/scoring.js?v=24"></script>
-<script src="js/export.js?v=24"></script>
-<script src="js/userspots.js?v=24"></script>
-<script src="js/charts.js?v=24"></script>
-<script src="js/trip.js?v=24"></script>
-<script src="js/app.js?v=24"></script>
+<script src="data/core.js?v=28"></script>
+<script src="data/regs.js?v=28"></script>
+<script src="data/science.js?v=28"></script>
+<script src="data/spots.js?v=28"></script>
+<script src="data/zones.js?v=28"></script>
+<script src="data/reports.js?v=28"></script>
+<script src="data/venice.js?v=28"></script>
+<script src="data/rigs_venice.js?v=28"></script>
+<script src="data/keys.js?v=28"></script>
+<script src="js/astro.js?v=28"></script>
+<script src="js/conditions.js?v=28"></script>
+<script src="js/scoring.js?v=28"></script>
+<script src="js/export.js?v=28"></script>
+<script src="js/userspots.js?v=28"></script>
+<script src="js/charts.js?v=28"></script>
+<script src="js/trip.js?v=28"></script>
+<script src="js/app.js?v=28"></script>
 </body>
 </html>

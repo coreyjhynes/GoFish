@@ -195,6 +195,10 @@ a:hover { text-decoration: underline; }
 .pin.t-area_center { background: #8fa8b8; border-style: dashed; }
 .pin.t-user { background: #ffd166; box-shadow: 0 0 7px rgba(255,209,102,.85), 0 1px 5px rgba(0,0,0,.6); }
 .pin.t-scallop_flat { background: #ff9ecb; }
+.pin.t-oil_rig { background: #ff8c42; border-radius: 4px; }
+.pin.t-lump { background: #ffd23f; }
+.pin.t-deep_drop { background: #7f5af0; color: #fff; }
+.pin.t-reef_light { background: #fff3a0; }
 .pin.gC { opacity: .85; border-style: dashed; }
 .pin.dim { opacity: .35; }
 

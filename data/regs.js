@@ -133,6 +133,51 @@ window.DATA_REGS = {
       needs_verification: false,
       url: "https://myfwc.com/fishing/saltwater/recreational/bay-scallops/"
     },
+    yellowfin_tuna: {
+      name: "Yellowfin Tuna",
+      open: [{ start: "2026-01-01", end: "2026-12-31", note: "year-round (federal HMS)" }],
+      bag: "3/person/day",
+      size: "27\" curved fork length",
+      agg: "Federal HMS Angling permit REQUIRED on the vessel (hmspermits.noaa.gov) — Gulf (Venice) and Atlantic (Keys). Land with tail + one pectoral fin attached. LA also requires the free ROLP.",
+      needs_verification: false,
+      url: "https://www.fisheries.noaa.gov/atlantic-highly-migratory-species/recreational-atlantic-bigeye-albacore-yellowfin-and-skipjack-tuna"
+    },
+    blackfin_tuna: {
+      name: "Blackfin Tuna",
+      open: [{ start: "2026-01-01", end: "2026-12-31", note: "year-round" }],
+      bag: "FL: 2/person or 10/vessel (whichever is GREATER) · LA: no limit",
+      size: "No minimum",
+      agg: "Not federally managed — the only tuna that doesn't need the HMS permit. LA requires the free ROLP to possess.",
+      needs_verification: false,
+      url: "https://myfwc.com/fishing/saltwater/recreational/tunas/"
+    },
+    mahi: {
+      name: "Mahi (Dolphinfish)",
+      open: [{ start: "2026-01-01", end: "2026-12-31", note: "year-round" }],
+      bag: "Keys (FL Atlantic): 5/person AND 30/vessel · FL Gulf: 10/person · LA (Venice): no limit (ROLP reqd)",
+      size: "FL Atlantic: 20\" fork length · none in Gulf/LA",
+      agg: "Keys trips follow the tighter 2022 Atlantic rules — cull schoolies.",
+      needs_verification: false,
+      url: "https://myfwc.com/fishing/saltwater/recreational/dolphinfish/"
+    },
+    wahoo: {
+      name: "Wahoo",
+      open: [{ start: "2026-01-01", end: "2026-12-31", note: "year-round" }],
+      bag: "FL: 2/person/day · LA: 5/person (rule since Jun 2025)",
+      size: "No minimum",
+      agg: "Winter is wahoo time everywhere — Keys peak Nov–Feb (±4 days of full/new moons), Venice Dec–Mar on the Lump.",
+      needs_verification: false,
+      url: "https://www.wlf.louisiana.gov/news/new-recreational-wahoo-regulations-effective-june-20"
+    },
+    swordfish: {
+      name: "Swordfish",
+      open: [{ start: "2026-01-01", end: "2026-12-31", note: "year-round (federal HMS)" }],
+      bag: "1/person/trip, max 4/vessel (private rec)",
+      size: "47\" lower-jaw fork length",
+      agg: "HMS Angling permit required; non-tournament landings MUST be reported within 24 hrs (HMS Catch app / 800-894-5528). No retention with a hammerhead or oceanic whitetip aboard. Daytime fishery 1,200–1,800 ft.",
+      needs_verification: false,
+      url: "https://www.fisheries.noaa.gov/atlantic-highly-migratory-species/recreational-atlantic-swordfish-fishery-statuses-minimum-sizes"
+    },
     hogfish: {
       name: "Hogfish (Gulf zone)",
       open: [{ start: "2026-01-01", end: "2026-12-31", note: "year-round in Gulf zone" }],
@@ -150,6 +195,10 @@ window.DATA_REGS = {
   ],
   permits: [
     { name: "State Reef Fish Angler designation (FREE)", required_for: "required for red snapper, vermilion, yellowtail, hogfish, gag, red/black grouper, AJ, triggerfish from a private boat — renew annually", url: "https://myfwc.com/fishing/saltwater/recreational/state-reef-fish-survey/" },
-    { name: "FL saltwater fishing license", required_for: "standard requirements unless exempt; no federal permit needed for private rec", url: "https://myfwc.com/fishing/saltwater/recreational/" }
+    { name: "FL saltwater fishing license", required_for: "standard requirements unless exempt; no federal permit needed for private rec reef fish", url: "https://myfwc.com/fishing/saltwater/recreational/" },
+    { name: "Federal HMS Angling permit (~$26/yr)", required_for: "REQUIRED to fish for/retain tuna (incl. yellowfin & blackfin in federal waters), swordfish, billfish — both Venice LA and the Keys. Buy at hmspermits.noaa.gov", url: "https://hmspermits.noaa.gov/" },
+    { name: "Louisiana Saltwater License (Venice trips)", required_for: "LA basic + saltwater license for residents/non-residents fishing out of Venice; LDWF offers short-term non-resident options", url: "https://www.wlf.louisiana.gov/page/fishing-licenses-and-permits" },
+    { name: "Louisiana ROLP (free, online)", required_for: "Recreational Offshore Landing Permit — REQUIRED in LA to possess tunas, billfish, swordfish, wahoo, dolphinfish, snappers, groupers, AJ, cobia. Two minutes online, zero dollars, big ticket without it.", url: "https://www.wlf.louisiana.gov/page/rolp" },
+    { name: "Western Dry Rocks closure (Keys)", required_for: "ALL fishing prohibited in the marked area ~10 mi SW of Key West, April 1 – July 31 every year (spawning protection). Shown as a red zone on the map.", url: "https://myfwc.com/fishing/saltwater/recreational/wdr/" }
   ]
 };

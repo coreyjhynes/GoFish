@@ -5,6 +5,10 @@
 
   const MI = 3958.7613; // earth radius, statute miles
 
+  // Region gate: spots/zones carry region ('tampa' when absent); the app sets
+  // window.CURRENT_REGION on region switch.
+  function inRegion(x) { return (x.region || "tampa") === (window.CURRENT_REGION || "tampa"); }
+
   function haversineMi(lat1, lon1, lat2, lon2) {
     const r = Math.PI / 180;
     const dLat = (lat2 - lat1) * r, dLon = (lon2 - lon1) * r;
@@ -165,10 +169,12 @@
   function rankSpots(date, speciesFilter, launch, n) {
     const out = [];
     for (const s of (window.DATA_SPOTS || [])) {
+      if (!inRegion(s)) continue;
       const r = scoreTarget(s, date, speciesFilter, false);
       out.push({ spot: s, ...r, distMi: launch ? haversineMi(launch.lat, launch.lon, s.lat, s.lon) : null });
     }
     for (const z of (window.DATA_ZONES || [])) {
+      if (!inRegion(z)) continue;
       if (z.avoid) continue; // no-take zones are never recommendations
       const r = scoreTarget(z, date, speciesFilter, true);
       out.push({ zone: z, ...r, distMi: launch && z.center ? haversineMi(launch.lat, launch.lon, z.center[0], z.center[1]) : null });
@@ -342,11 +348,13 @@
   function heatPoints(date, speciesFilter) {
     const pts = [];
     for (const s of (window.DATA_SPOTS || [])) {
+      if (!inRegion(s)) continue;
       const r = scoreTarget(s, date, speciesFilter, false);
       if (speciesFilter !== "all" && (s.species[speciesFilter] || 0) === 0) continue;
       pts.push([s.lat, s.lon, Math.pow(r.score / 100, 1.6)]);
     }
     for (const z of (window.DATA_ZONES || [])) {
+      if (!inRegion(z)) continue;
       if (z.avoid) continue;
       const r = scoreTarget(z, date, speciesFilter, true);
       if (speciesFilter !== "all" && (z.species[speciesFilter] || 0) === 0) continue;
@@ -411,6 +419,7 @@
 
     // Inside (or on) a public zone?
     for (const z of (window.DATA_ZONES || [])) {
+      if (!inRegion(z)) continue;
       if (z.avoid) {
         if (zoneContains(z, spot.lat, spot.lon))
           return { score: 0, label: "NO-TAKE", reasons: ["⛔ Inside " + z.name.replace(/^⛔\s*/, "") + " — bottom fishing prohibited"] };
@@ -427,6 +436,7 @@
     // Near a public spot?
     let bestNear = null;
     for (const p of (window.DATA_SPOTS || [])) {
+      if (!inRegion(p)) continue;
       if (speciesFilter !== "all" && (p.species[speciesFilter] || 0) === 0) continue;
       const d = haversineMi(spot.lat, spot.lon, p.lat, p.lon);
       if (d <= 7) {

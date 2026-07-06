@@ -5,6 +5,7 @@
   /* ================= state ================= */
   const state = {
     date: new Date(),
+    region: localStorage.getItem("GBI_REGION") || "tampa",
     launchId: null,
     species: "all",
     maxSeas: 3,
@@ -19,10 +20,14 @@
   const fmtT = d => d ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).replace(" ", "").toLowerCase() : "—";
   const fmtD = d => d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 
-  function launch() { return DATA_CORE.launches.find(l => l.id === state.launchId) || DATA_CORE.launches[0]; }
-  // All displayed distances measure from this fixed point (Anclote River entrance),
-  // regardless of the selected launch. Launch still drives tides/rings/trips.
-  function distRef() { return DATA_CORE.distanceRef || launch(); }
+  /* ---- regions ---- */
+  function regionObj() { return DATA_CORE.regions.find(r => r.id === state.region) || DATA_CORE.regions[0]; }
+  function regionLaunches() { return DATA_CORE.launches.filter(l => (l.region || "tampa") === state.region); }
+  function inRegion(x) { return (x.region || "tampa") === state.region; }
+  function launch() { return regionLaunches().find(l => l.id === state.launchId) || regionLaunches()[0]; }
+  // Distances: fixed regional reference when defined (Tampa = Anclote River
+  // entrance, Venice = South Pass); otherwise the selected launch (Keys).
+  function distRef() { return regionObj().distanceRef || launch(); }
 
   function destPoint(lat, lon, bearingDeg, distMi) {
     const R = 3958.7613, r = Math.PI / 180;
@@ -34,16 +39,17 @@
   }
 
   function defaultForecastPoint() {
-    const L0 = launch();
-    const p = destPoint(L0.lat, L0.lon, 262, 35);
-    return { lat: p.lat, lon: p.lon, label: "~35 mi out of " + L0.name.split(" (")[0] };
+    const L0 = launch(), R = regionObj();
+    const p = destPoint(L0.lat, L0.lon, R.fpBearing || 262, R.fpMiles || 35);
+    return { lat: p.lat, lon: p.lon, label: "~" + (R.fpMiles || 35) + " mi out of " + L0.name.split(" (")[0] };
   }
 
   /* ================= map ================= */
-  let map, heatLayer, spotLayer, zoneLayer, ringLayer, fpMarker, chartGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup;
+  let map, heatLayer, spotLayer, zoneLayer, ringLayer, fpMarker, chartGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas;
 
   function initMap() {
-    map = L.map("map", { zoomControl: true, attributionControl: true }).setView([28.05, -83.45], 8);
+    const R0 = regionObj();
+    map = L.map("map", { zoomControl: true, attributionControl: true }).setView(R0.center, R0.zoom);
 
     const ocean = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}", {
       attribution: "Esri, GEBCO, NOAA, Garmin", maxNativeZoom: 13, maxZoom: 16
@@ -87,11 +93,12 @@
     spotLayer = L.layerGroup().addTo(map);
     ringLayer = L.layerGroup().addTo(map);
     tripLayer = L.layerGroup().addTo(map);
+    rigLayer = L.layerGroup().addTo(map);      // full BOEM platform field (Venice region)
 
     L.control.layers(
       { "Ocean chart": L.layerGroup([ocean, oceanRef]), "Satellite": L.layerGroup([sat, satRef]), "Streets": osm },
       { "Heatmap": heatLayer, "Spots": spotLayer, "Areas": zoneLayer, "Launch range rings": ringLayer,
-        "Spot range rings": spotRingLayer,
+        "Spot range rings": spotRingLayer, "Oil platforms (BOEM)": rigLayer,
         "Depth contours": contourGroup, "Depth model (BlueTopo)": bathyGroup,
         "Seagrass beds (FWC)": seagrassGroup,
         "My charts": chartGroup, "NOAA ENC chart (full)": encGroup },
@@ -156,10 +163,12 @@
     return { wreck: "Wreck", artificial_reef: "Artificial reef", barge: "Barge", tower: "Tower", rubble: "Rubble",
       ledge: "Ledge", hard_bottom: "Hard bottom", spring: "Spring", area_center: "Area", lump: "Lump",
       ledge_belt: "Ledge belt", natural_area: "Natural area", hapc: "Protected area (HAPC)", user: "My spot",
-      no_take: "NO-TAKE reserve", scallop_zone: "Scallop harvest zone", scallop_flat: "Scallop flat" }[t] || t;
+      no_take: "NO-TAKE reserve", scallop_zone: "Scallop harvest zone", scallop_flat: "Scallop flat",
+      oil_rig: "Oil rig / floater", lump: "Hump / lump", deep_drop: "Deep-drop grounds", reef_light: "Reef light",
+      troll_corridor: "Trolling corridor" }[t] || t;
   }
   function pinLetter(t) {
-    return { wreck: "W", artificial_reef: "R", barge: "B", tower: "T", rubble: "R", ledge: "L", hard_bottom: "H", spring: "S", area_center: "A", user: "★", scallop_flat: "S" }[t] || "•";
+    return { wreck: "W", artificial_reef: "R", barge: "B", tower: "T", rubble: "R", ledge: "L", hard_bottom: "H", spring: "S", area_center: "A", user: "★", scallop_flat: "S", oil_rig: "O", lump: "H", deep_drop: "D", reef_light: "✦" }[t] || "•";
   }
   function allSpots() { return DATA_SPOTS.concat(window.USER_SPOTS || []); }
 
@@ -187,6 +196,7 @@
   function zoneAt(ll) {
     let best = null, bestSize = Infinity;
     for (const z of DATA_ZONES) {
+      if (!inRegion(z)) continue;
       if (!Scoring.zoneContains(z, ll.lat, ll.lng)) continue;
       let size;
       if (z.radius_mi) size = z.radius_mi * z.radius_mi;
@@ -253,11 +263,13 @@
     const ql = q.trim().toLowerCase().replace(/\s+/g, " ");
     const cand = [];
     for (const s of allSpots()) {
+      if (!s.user && !inRegion(s)) continue; // public spots: this region only; user spots always searchable
       const nm = s.name.toLowerCase().replace(/\s+/g, " ");
       if ((nm + " " + (s.notes || "").toLowerCase() + " " + s.type).includes(ql))
         cand.push({ rank: nm.startsWith(ql) ? 0 : nm.includes(ql) ? 1 : 2, target: s, isZone: false });
     }
     for (const z of DATA_ZONES) {
+      if (!inRegion(z)) continue;
       if ((z.name + " " + (z.notes || "")).toLowerCase().includes(ql))
         cand.push({ rank: z.name.toLowerCase().startsWith(ql) ? 0 : z.name.toLowerCase().includes(ql) ? 1 : 2, target: z, isZone: true });
     }
@@ -402,6 +414,7 @@
     spotLayer.clearLayers();
     // Public/research spots: rich divIcon pins (always a small set)
     for (const s of DATA_SPOTS) {
+      if (!inRegion(s)) continue;
       const relevant = state.species === "all" || (s.species[state.species] || 0) > 0;
       const icon = L.divIcon({
         className: "",
@@ -445,6 +458,7 @@
   function drawZones() {
     zoneLayer.clearLayers();
     for (const z of DATA_ZONES) {
+      if (!inRegion(z)) continue;
       // Fill steps UP HARD with zoom: inside a big zone its edges are off-screen, so the
       // tint is the only thing telling you you're in scallop/managed water. Hot magenta
       // at close zoom so it reads over green seagrass + satellite.
@@ -463,6 +477,39 @@
       else if (z.center) shape = L.circle(z.center, { ...opts, radius: (z.radius_mi || 5) * 1609.344 });
       if (!shape) continue;
       shape.addTo(zoneLayer);
+    }
+  }
+
+  /* Full BOEM platform field — context layer for the Venice region only.
+     428 standing structures; steel canvas dots, click for GPS/trip actions. */
+  function rigPopup(lat, lon, label) {
+    pendingRingName = label;
+    const ref = distRef();
+    L.popup({ maxWidth: 300 }).setLatLng([lat, lon]).setContent(
+      '<div class="pop"><h4>' + label + "</h4>" +
+      '<span class="badge type">Oil platform</span> <span class="badge gA">BOEM</span>' +
+      '<div class="coords">' + lat.toFixed(5) + ", " + lon.toFixed(5) + "<br>" + Exporter.ddm(lat, true) + "&nbsp;&nbsp;" + Exporter.ddm(lon, false) + "</div>" +
+      '<div class="small muted">' + Scoring.haversineMi(ref.lat, ref.lon, lat, lon).toFixed(0) + " mi from " + (ref.short || ref.name) + " · every standing structure holds bait — the curated pins are the proven producers</div>" +
+      '<button onclick="App.copyCoords(' + lat.toFixed(6) + "," + lon.toFixed(6) + ')">📋 Copy GPS</button>' +
+      "<button onclick=\"App.setForecastPoint(" + lat.toFixed(5) + "," + lon.toFixed(5) + ",'" + label + "')\">🌊 Forecast here</button>" +
+      "<button onclick=\"App.addTripStop('" + label + "'," + lat.toFixed(6) + "," + lon.toFixed(6) + ')">➕ Add to trip</button></div>'
+    ).openOn(map);
+  }
+  function drawRigs() {
+    if (!rigLayer) return;
+    rigLayer.clearLayers();
+    if (state.region !== "venice" || !window.RIGS_VENICE) return;
+    if (!rigCanvas) rigCanvas = L.canvas({ padding: 0.3, tolerance: 6 });
+    for (const r of RIGS_VENICE) {
+      const la = r[0], lo = r[1], id = r[2], yr = r[3];
+      const label = "BOEM platform #" + id + (yr ? " · since " + yr : "");
+      const m = L.circleMarker([la, lo], {
+        renderer: rigCanvas, radius: 3.5,
+        color: "#22303d", weight: 1, fillColor: "#aab4c0", fillOpacity: 0.9
+      });
+      onLeftClick(m, () => rigPopup(la, lo, label));
+      onRightClick(m, () => rigPopup(la, lo, label));
+      m.addTo(rigLayer);
     }
   }
 
@@ -1035,9 +1082,10 @@
       "<b>Your imported spots are overlay-only</b> — they never feed the scores or heatmap; instead each gets an <i>alignment</i> readout showing how the public signal agrees with it."));
     root.append(card0);
 
+    const regionReports = DATA_REPORTS.filter(r => (r.region || "tampa") === state.region);
     const card = el("div", "card");
-    card.append(el("h3", null, "Recent intel feed (" + DATA_REPORTS.length + " reports)"));
-    const sorted = [...DATA_REPORTS].sort((a, b) => b.date.localeCompare(a.date));
+    card.append(el("h3", null, "Recent intel feed — " + regionObj().name + " (" + regionReports.length + " reports)"));
+    const sorted = [...regionReports].sort((a, b) => b.date.localeCompare(a.date));
     for (const r of sorted) {
       const div = el("div", "report");
       const speciesNames = (r.species || []).map(Scoring.speciesName).join(", ");
@@ -1050,11 +1098,12 @@
     }
     root.append(card);
 
-    if (DATA_SCIENCE.watch && DATA_SCIENCE.watch.length) {
+    const watchList = (DATA_SCIENCE.watch || []).filter(w => (w.region || "tampa") === state.region);
+    if (watchList.length) {
       const w = el("div", "card");
-      w.append(el("h3", null, "Where fresh intel lives — screenshot the good stuff"));
-      w.append(el("div", "muted small", "These update constantly but most are login/bot-walled, so the app can't scrape them. Check before a trip; screenshot posts with depths, dates or chartplotter screens and hand them to Claude — they become report entries on the next data refresh."));
-      for (const src of DATA_SCIENCE.watch) {
+      w.append(el("h3", null, "Where fresh intel lives — " + regionObj().name));
+      w.append(el("div", "muted small", "Charter report pages here are scrapeable — they're what Claude mines on a data refresh. The fleets' Facebook/Instagram feeds are login-walled: screenshot the good posts (depths, areas, chartplotter pics) and hand them to Claude — they become report entries."));
+      for (const src of watchList) {
         w.append(el("div", "report", '<a href="' + src.url + '" target="_blank" rel="noopener"><b>' + src.name + '</b> ↗</a><div class="rdetail">' + src.what + "</div>"));
       }
       root.append(w);
@@ -1098,7 +1147,7 @@
   }
 
   function refreshAll() {
-    drawRings(); drawSpots(); drawZones(); refreshHeat(); Trip.plot(); renderTab();
+    drawRings(); drawSpots(); drawZones(); drawRigs(); refreshHeat(); Trip.plot(); renderTab();
   }
 
   let toastTimer;
@@ -1131,15 +1180,69 @@
   }
 
   /* ================= boot ================= */
-  function buildHeader() {
+  function populateLaunches() {
     const lsel = $("#launchSel");
-    DATA_CORE.launches.forEach(l => {
+    lsel.innerHTML = "";
+    regionLaunches().forEach(l => {
       const o = document.createElement("option"); o.value = l.id; o.textContent = l.name; lsel.append(o);
     });
-    // Default: Anclote / Tarpon Springs; remember the last choice
-    const savedLaunch = localStorage.getItem("GBI_LAUNCH");
-    state.launchId = DATA_CORE.launches.some(l => l.id === savedLaunch) ? savedLaunch : "anclote";
+    const saved = localStorage.getItem("GBI_LAUNCH");
+    state.launchId = regionLaunches().some(l => l.id === saved) ? saved : regionLaunches()[0].id;
     lsel.value = state.launchId;
+  }
+
+  function buildChips() {
+    const chips = $("#speciesChips");
+    chips.innerHTML = "";
+    const mk = (id, name, color) => {
+      const c = el("span", "chip" + (state.species === id ? " on" : ""), name);
+      if (state.species === id) c.style.background = color || "var(--accent)";
+      c.onclick = () => {
+        state.species = id;
+        chips.querySelectorAll(".chip").forEach(x => { x.classList.remove("on"); x.style.background = ""; });
+        c.classList.add("on"); c.style.background = color || "var(--accent)";
+        if (id === "bay_scallop" && !map.hasLayer(seagrassGroup)) {
+          map.addLayer(seagrassGroup);
+          Charts.seagrassRefresh(map, seagrassGroup);
+          toast("🌿 Seagrass beds layer ON — dark green = continuous grass (toggle in layers control)");
+        }
+        refreshAll();
+      };
+      return c;
+    };
+    chips.append(mk("all", "All", "#3ec6d0"));
+    regionObj().species.forEach(id => {
+      const s = DATA_CORE.species.find(x => x.id === id);
+      if (s) chips.append(mk(s.id, s.short || s.name, s.color));
+    });
+  }
+
+  function switchRegion(id) {
+    state.region = id;
+    window.CURRENT_REGION = id;
+    try { localStorage.setItem("GBI_REGION", id); } catch (e) { /* ignore */ }
+    state.species = "all";
+    state.forecastPoint = null; if (fpMarker) fpMarker.remove();
+    alignCache = { key: "", rows: null };
+    populateLaunches();
+    buildChips();
+    const R = regionObj();
+    map.setView(R.center, R.zoom);
+    refreshAll();
+    loadForecast();
+    toast("Region: " + R.name);
+  }
+
+  function buildHeader() {
+    const rsel = $("#regionSel");
+    DATA_CORE.regions.forEach(r => {
+      const o = document.createElement("option"); o.value = r.id; o.textContent = r.name; rsel.append(o);
+    });
+    rsel.value = state.region;
+    rsel.onchange = () => switchRegion(rsel.value);
+
+    const lsel = $("#launchSel");
+    populateLaunches();
     lsel.onchange = () => {
       state.launchId = lsel.value;
       try { localStorage.setItem("GBI_LAUNCH", lsel.value); } catch (e) { /* ignore */ }
@@ -1160,25 +1263,7 @@
     seas.value = state.maxSeas;
     seas.onchange = () => { state.maxSeas = parseFloat(seas.value) || 3; renderTab(); };
 
-    const chips = $("#speciesChips");
-    const mk = (id, name, color) => {
-      const c = el("span", "chip" + (state.species === id ? " on" : ""), name);
-      if (state.species === id) c.style.background = color || "var(--accent)";
-      c.onclick = () => {
-        state.species = id;
-        chips.querySelectorAll(".chip").forEach(x => { x.classList.remove("on"); x.style.background = ""; });
-        c.classList.add("on"); c.style.background = color || "var(--accent)";
-        if (id === "bay_scallop" && !map.hasLayer(seagrassGroup)) {
-          map.addLayer(seagrassGroup);
-          Charts.seagrassRefresh(map, seagrassGroup);
-          toast("🌿 Seagrass beds layer ON — dark green = continuous grass (toggle in layers control)");
-        }
-        refreshAll();
-      };
-      return c;
-    };
-    chips.append(mk("all", "All", "#3ec6d0"));
-    DATA_CORE.species.filter(s => !s.minor).forEach(s => chips.append(mk(s.id, s.short || s.name, s.color)));
+    buildChips();
 
     $("#refreshBtn").onclick = () => {
       // Only the forecast cache ("gbi:https://…") — never GBI_MY_SPOTS
@@ -1207,6 +1292,7 @@
     // first paint) must not take down the whole UI — and must name itself in the console.
     const stage = (name, fn) => { try { fn(); } catch (e) { console.error("[boot] " + name + " failed:", e); } };
     state.date = new Date(); state.date.setHours(12, 0, 0, 0);
+    window.CURRENT_REGION = state.region; // scoring reads this for region filtering
     stage("userspots", () => UserSpots.load());
     stage("map", () => initMap());
     stage("trip", () => Trip.init({
