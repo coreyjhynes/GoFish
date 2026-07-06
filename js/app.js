@@ -25,9 +25,12 @@
   function regionLaunches() { return DATA_CORE.launches.filter(l => (l.region || "tampa") === state.region); }
   function inRegion(x) { return (x.region || "tampa") === state.region; }
   function launch() { return regionLaunches().find(l => l.id === state.launchId) || regionLaunches()[0]; }
-  // Distances: fixed regional reference when defined (Tampa = Anclote River
-  // entrance, Venice = South Pass); otherwise the selected launch (Keys).
-  function distRef() { return regionObj().distanceRef || launch(); }
+  // Distances: live GPS position when locate-me is on; else the fixed regional
+  // reference (Tampa = Anclote entrance, Venice = South Pass); else the launch (Keys).
+  function distRef() {
+    if (state.gpsFollow && state.gpsPos) return { name: "your position", short: "you", lat: state.gpsPos.lat, lon: state.gpsPos.lon };
+    return regionObj().distanceRef || launch();
+  }
 
   function destPoint(lat, lon, bearingDeg, distMi) {
     const R = 3958.7613, r = Math.PI / 180;
@@ -1274,6 +1277,103 @@
     document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { state.tab = b.dataset.tab; renderTab(); });
   }
 
+  /* ---- mobile UI: collapsed header + draggable bottom sheet ---- */
+  function initMobileUI() {
+    const mob = window.matchMedia("(max-width: 860px)");
+    const gear = $("#gearBtn"), adv = $("#advCtl");
+    if (gear && adv) {
+      gear.onclick = e => { e.stopPropagation(); adv.classList.toggle("open"); };
+      document.addEventListener("click", e => {
+        if (adv.classList.contains("open") && !adv.contains(e.target) && e.target !== gear) adv.classList.remove("open");
+      });
+    }
+    const sb = $("#sidebar"), handle = $("#sheetHandle");
+    const hdr = document.querySelector("header");
+    const setHdrVar = () => document.documentElement.style.setProperty("--hdrH", hdr.offsetHeight + "px");
+    const det = () => ({ full: Math.max(58, Math.round(innerHeight * 0.11)), half: Math.round(innerHeight * 0.46), peek: innerHeight - 152 });
+    let pos = "peek";
+    function apply(p, anim) {
+      pos = p;
+      sb.style.transition = anim === false ? "none" : "top .25s ease";
+      sb.style.top = det()[p] + "px";
+    }
+    function layout() {
+      if (!mob.matches) {
+        sb.style.top = ""; sb.style.transition = "";
+        document.documentElement.style.removeProperty("--hdrH");
+      } else {
+        setHdrVar(); apply(pos, false);
+      }
+      if (map) setTimeout(() => map.invalidateSize(), 80);
+    }
+    if (handle) {
+      let drag = false, sy = 0, st = 0;
+      handle.addEventListener("pointerdown", e => {
+        if (!mob.matches) return;
+        drag = true; sy = e.clientY; st = parseFloat(sb.style.top) || det()[pos];
+        sb.style.transition = "none";
+        handle.setPointerCapture(e.pointerId);
+      });
+      handle.addEventListener("pointermove", e => {
+        if (!drag) return;
+        const d = det();
+        sb.style.top = Math.min(d.peek, Math.max(d.full, st + (e.clientY - sy))) + "px";
+      });
+      handle.addEventListener("pointerup", () => {
+        if (!drag) return;
+        drag = false;
+        const t = parseFloat(sb.style.top), d = det();
+        pos = Math.abs(t - d.full) < Math.abs(t - d.half) ? "full" : (Math.abs(t - d.half) < Math.abs(t - d.peek) ? "half" : "peek");
+        apply(pos);
+      });
+    }
+    document.querySelectorAll("#tabs button").forEach(b =>
+      b.addEventListener("click", () => { if (mob.matches && pos === "peek") apply("half"); }));
+    window.addEventListener("resize", layout);
+    if (mob.addEventListener) mob.addEventListener("change", layout);
+    layout();
+  }
+
+  /* ---- locate me: live GPS dot + distances measured from the boat ---- */
+  let gpsMarker = null, gpsRing = null;
+  function toggleLocate() {
+    const btn = $("#locateBtn");
+    if (state.gpsWatch != null) {
+      navigator.geolocation.clearWatch(state.gpsWatch);
+      state.gpsWatch = null; state.gpsFollow = false;
+      if (gpsMarker) { gpsMarker.remove(); gpsMarker = null; }
+      if (gpsRing) { gpsRing.remove(); gpsRing = null; }
+      btn.classList.remove("on");
+      renderTab();
+      toast("GPS off — distances from " + (distRef().short || distRef().name));
+      return;
+    }
+    if (!navigator.geolocation) { toast("No GPS available in this browser"); return; }
+    btn.classList.add("on");
+    let first = true;
+    state.gpsWatch = navigator.geolocation.watchPosition(p => {
+      state.gpsPos = { lat: p.coords.latitude, lon: p.coords.longitude };
+      state.gpsFollow = true;
+      const ll = [state.gpsPos.lat, state.gpsPos.lon];
+      if (!gpsMarker) {
+        gpsMarker = L.circleMarker(ll, { radius: 7, color: "#fff", weight: 2, fillColor: "#2f81f7", fillOpacity: 1 }).addTo(map);
+        gpsRing = L.circle(ll, { radius: p.coords.accuracy || 60, color: "#2f81f7", weight: 1, opacity: 0.5, fillOpacity: 0.08 }).addTo(map);
+      } else {
+        gpsMarker.setLatLng(ll); gpsRing.setLatLng(ll); gpsRing.setRadius(p.coords.accuracy || 60);
+      }
+      if (first) {
+        first = false;
+        map.setView(ll, Math.max(map.getZoom(), 10));
+        renderTab();
+        toast("📍 Distances now measured from YOU");
+      }
+    }, err => {
+      toast("GPS unavailable: " + err.message);
+      btn.classList.remove("on");
+      state.gpsWatch = null;
+    }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+  }
+
   function removeUserSpot(id) {
     UserSpots.remove(id);
     map.closePopup();
@@ -1306,6 +1406,8 @@
     stage("render", () => refreshAll());
     stage("forecast", () => loadForecast());
     stage("charts", () => Charts.render(chartGroup).then(recs => { if (recs.length && state.tab === "spots") renderTab(); }));
+    stage("mobile", () => initMobileUI());
+    stage("locate", () => { const b = $("#locateBtn"); if (b) b.onclick = toggleLocate; });
     App.map = map; App.chartGroup = chartGroup; App.encGroup = encGroup;
   }
 
