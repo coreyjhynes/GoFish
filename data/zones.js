@@ -104,6 +104,24 @@ window.DATA_ZONES = [
       { name: "Clearwater Beach Fishing Charter reports", url: "https://clearwaterbeachfishingcharter.com/fishing-reports/" }
     ]
   },
+  {
+    id: "hudson_potholes",
+    name: "Hudson pothole grounds (95–120 ft, computed)",
+    kind: "hard_bottom",
+    // Band footprint traced from NOAA DEM sampling (0.02° grid, 2026-07-05):
+    // the 95–120 ft corridor west of Hudson — keeper red grouper pothole water.
+    polygon: [[28.20, -84.06], [28.24, -84.14], [28.28, -84.10], [28.32, -84.16], [28.36, -84.16], [28.40, -84.22], [28.44, -84.28], [28.48, -84.30], [28.50, -84.24], [28.50, -83.72], [28.44, -83.70], [28.36, -83.72], [28.28, -83.70], [28.20, -83.70]],
+    center: [28.36, -83.95],
+    depth_ft: [95, 120],
+    grade: "C",
+    species: { red_grouper: 5, red_snapper: 4, lane_snapper: 3, mangrove_snapper: 3, vermilion_snapper: 2 },
+    notes: "'The potholes' aren't one waypoint — they're the solution holes red grouper excavate in the flat swiss-cheese limestone, and this is where that bottom sits in keeper depth W of Hudson: ~62–86 mi out (checkpoint: 80 mi due west = ~121 ft). Individual potholes are yards wide — invisible to any chart, including this one — so run the band and DRIFT-AND-MARK: baits down while covering ground, waypoint every bite, then anchor the marks. Hubbard's reports hammer this pattern ('huge numbers of red grouper on the potholes'). Western/deep edge brushes 120 ft — mind the Feb 1–Mar 31 >20-fathom grouper closure there.",
+    sources: [
+      { name: "NOAA NCEI DEM (band computed)", url: "https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer" },
+      { name: "Hubbard's Marina pothole reports", url: "https://www.hubbardsmarina.com/hubbards-marina-fishing-reports/" }
+    ]
+  },
+
   /* ---------- BAY SCALLOP HARVEST ZONES (2026 seasons — official FWC dates, boundaries landmark-based/approximate) ---------- */
   {
     id: "scallop_pasco",
