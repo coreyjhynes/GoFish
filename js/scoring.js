@@ -175,7 +175,7 @@
     }
     for (const z of (window.DATA_ZONES || [])) {
       if (!inRegion(z)) continue;
-      if (z.avoid) continue; // no-take zones are never recommendations
+      if (z.avoid || z.kind === "pipeline") continue; // no-take zones & reference lines are never recommendations
       const r = scoreTarget(z, date, speciesFilter, true);
       out.push({ zone: z, ...r, distMi: launch && z.center ? haversineMi(launch.lat, launch.lon, z.center[0], z.center[1]) : null });
     }

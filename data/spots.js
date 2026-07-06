@@ -206,5 +206,66 @@ window.DATA_SPOTS = [
     species: { red_snapper: 4, red_grouper: 4, amberjack: 3, mangrove_snapper: 3, vermilion_snapper: 3 },
     notes: "Second published-GPS spring from the same feature (27°08.225' / 83°26.391'), 160 ft — a natural pair with Top Cap ~8 mi apart on the southern grounds.",
     sources: [{ name: "Florida Sportsman offshore springs feature", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
+  },
+
+  /* ---------- BIG BEND SPRING FIELD (north of the Gulfstream line; SRWMD documented list,
+     positions unverified by publisher — grade C, search nearby on sonar. Bottom depths
+     DEM-sampled 2026-07-05; vent/hole depths below bottom unknown. Pairs with Steinhatchee
+     scallop trailer trips: 12–35 mi from the Steinhatchee ramp. ---------- */
+  {
+    id: "ray_hole", name: "Ray Hole Spring", lat: 29.74833, lon: -84.04167,
+    depth_ft: 40, relief_ft: 0, type: "spring", grade: "C",
+    species: { gag_grouper: 3, mangrove_snapper: 3, hogfish: 2 },
+    notes: "THE famous Big Bend spring — documented by SRWMD (and studied by FSU archaeologists for paleo-shoreline sites). 40 ft bottom ~20 mi off the Econfina/Aucilla reach. Positions on this list are unconfirmed by the publisher — arrive and search.",
+    sources: [{ name: "FS springs feature (SRWMD list)", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
+  },
+  {
+    id: "steinhatchee_spring", name: "Steinhatchee Spring", lat: 29.61233, lon: -84.00106,
+    depth_ft: 55, relief_ft: 0, type: "spring", grade: "C",
+    species: { gag_grouper: 3, mangrove_snapper: 3, red_grouper: 2 },
+    notes: "SRWMD-listed vent in 55 ft, ~33 mi W of the Steinhatchee mouth.",
+    sources: [{ name: "FS springs feature (SRWMD list)", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
+  },
+  {
+    id: "limerock_spring", name: "Limerock Spring", lat: 29.60642, lon: -84.24844,
+    depth_ft: 66, relief_ft: 0, type: "spring", grade: "C",
+    species: { gag_grouper: 3, mangrove_snapper: 3, red_grouper: 3 },
+    notes: "Deepest of the SRWMD list at 66 ft — the far-west outlier of the Big Bend spring field.",
+    sources: [{ name: "FS springs feature (SRWMD list)", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
+  },
+  {
+    id: "twin_springs", name: "Twin Springs (Spring 1 & 2)", lat: 29.46056, lon: -83.99250,
+    depth_ft: 59, relief_ft: 0, type: "spring", grade: "C",
+    species: { gag_grouper: 3, mangrove_snapper: 3, red_grouper: 2 },
+    notes: "Two SRWMD-listed vents a boat-length apart in 59 ft, WSW of Pepperfish Keys.",
+    sources: [{ name: "FS springs feature (SRWMD list)", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
+  },
+  {
+    id: "lamb_springs", name: "Lamb Spring cluster (+ Springs 3 & 4)", lat: 29.44419, lon: -83.84389,
+    depth_ft: 56, relief_ft: 0, type: "spring", grade: "C",
+    species: { gag_grouper: 3, mangrove_snapper: 3, red_grouper: 2 },
+    notes: "Three listed vents within ~100 yds in 56 ft — a compact field worth circling on sonar.",
+    sources: [{ name: "FS springs feature (SRWMD list)", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
+  },
+  {
+    id: "crack_springs", name: "The Crack (+ Easy Rider Spring)", lat: 29.37608, lon: -83.73474,
+    depth_ft: 57, relief_ft: 0, type: "spring", grade: "C",
+    species: { gag_grouper: 3, mangrove_snapper: 3, red_grouper: 2 },
+    notes: "Paired vents in 57 ft; 'Crack 2' lies ~1.6 mi NE (29.39697, -83.71203) in 53 ft.",
+    sources: [{ name: "FS springs feature (SRWMD list)", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
+  },
+  {
+    id: "billys_hole", name: "Billy's Hole", lat: 29.37439, lon: -83.92531,
+    depth_ft: 66, relief_ft: 0, type: "spring", grade: "C",
+    species: { gag_grouper: 3, mangrove_snapper: 3, red_grouper: 3 },
+    notes: "SRWMD-listed spring in 66 ft — the deep southwest corner of the field, with John's Holes ~2 mi west.",
+    sources: [{ name: "FS springs feature (SRWMD list)", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
+  },
+  {
+    id: "johns_holes", name: "John's Holes (1 & 2)", lat: 29.36128, lon: -83.95614,
+    depth_ft: 56, relief_ft: 0, type: "spring", grade: "C",
+    species: { gag_grouper: 3, mangrove_snapper: 3, red_grouper: 2 },
+    notes: "Paired vents ~¼ mi apart in 56 ft, southernmost of the Big Bend spring field. (Skipped from this list as kayak-shallow: Ocean Hole 3 ft, Econfina Spring 8 ft, Spring 22 16 ft.)",
+    sources: [{ name: "FS springs feature (SRWMD list)", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
   }
 ];

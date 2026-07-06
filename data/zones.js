@@ -105,6 +105,17 @@ window.DATA_ZONES = [
     ]
   },
   {
+    id: "gulfstream_pipeline",
+    name: "Gulfstream gas pipeline (36\") — reference line",
+    kind: "pipeline",
+    line: [[28.975, -85.664], [28.275, -84.719], [28.239, -84.612], [28.153, -84.543], [27.577, -83.095], [27.580, -82.856], [27.560, -82.777], [27.609, -82.646], [27.643, -82.597], [27.636, -82.575]],
+    center: [27.90, -83.80],
+    grade: "A",
+    species: {},
+    notes: "The Gulfstream Natural Gas System 36\" line (BOEM segment G21459, active) — Mobile Bay to Port Manatee. Route from BOEM's official pipeline layer. Charted reference: 'north of the pipeline' = the Hudson pothole/swiss-cheese corridor. The buried line itself is not structure — but it's the landmark the fleet navigates by.",
+    sources: [{ name: "BOEM OCS pipelines layer", url: "https://gis.boem.gov/arcgis/rest/services/BOEM_BSEE/GOA_Layers/MapServer/2" }]
+  },
+  {
     id: "hudson_potholes",
     name: "Hudson pothole grounds (95–120 ft, computed)",
     kind: "hard_bottom",

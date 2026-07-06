@@ -476,7 +476,8 @@
           : { color: z.kind === "hapc" ? "#b58aef" : "#2ec4b6", weight: 1.4, opacity: 0.75, fillOpacity: genFill, dashArray: "5 6" };
       const opts = { ...style, pane: "zones", interactive: false }; // info via right-click (geometry lookup), clicks pass through
       let shape;
-      if (z.polygon && z.polygon.length) shape = L.polygon(z.polygon, opts);
+      if (z.kind === "pipeline" && z.line) shape = L.polyline(z.line, { pane: "zones", interactive: false, color: "#aab4c0", weight: 2, opacity: 0.8, dashArray: "2 8" });
+      else if (z.polygon && z.polygon.length) shape = L.polygon(z.polygon, opts);
       else if (z.center) shape = L.circle(z.center, { ...opts, radius: (z.radius_mi || 5) * 1609.344 });
       if (!shape) continue;
       shape.addTo(zoneLayer);
