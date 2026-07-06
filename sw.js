@@ -20,15 +20,18 @@ self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
 
   if (url.origin === location.origin) {
-    // stale-while-revalidate
-    e.respondWith(caches.open(SHELL).then(async c => {
+    // stale-while-revalidate — waitUntil keeps the background refetch alive
+    // after we respond, otherwise the cache never actually updates
+    const work = caches.open(SHELL).then(async c => {
       const hit = await c.match(e.request);
       const net = fetch(e.request).then(r => {
         if (r && r.ok) c.put(e.request, r.clone());
         return r;
       }).catch(() => hit);
-      return hit || net;
-    }));
+      return { hit, net };
+    });
+    e.respondWith(work.then(w => w.hit || w.net));
+    e.waitUntil(work.then(w => w.net).catch(() => {}));
   } else {
     // network-first with cached fallback (tiles, APIs)
     e.respondWith(

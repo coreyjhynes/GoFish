@@ -48,7 +48,7 @@
   }
 
   /* ================= map ================= */
-  let map, heatLayer, spotLayer, zoneLayer, ringLayer, fpMarker, chartGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas, depthGroup, depthLabels;
+  let map, heatLayer, spotLayer, zoneLayer, ringLayer, ringsGroup, fpMarker, chartGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas, depthGroup, depthLabels, layerCtl;
 
   // Computed depth detail — the 10,353-point sounding lattice + marching-squares
   // contours harvested from NOAA's DEM into data/depth_tampa.js. Pure vectors, so
@@ -135,10 +135,10 @@
     map.createPane("zones").style.zIndex = 450;
     chartGroup = L.layerGroup().addTo(map);   // user-imported chart overlays (under vectors/pins)
     encGroup = L.layerGroup();                 // live NOAA ENC full chart (opt-in via layer control)
-    contourGroup = L.layerGroup().addTo(map);  // ENC depth contour lines + soundings — ON by default
+    contourGroup = L.layerGroup();             // ENC chart contours — opt-in; the computed layer covers the default view
     initDepthDetail();                         // computed sounding lattice + contours — ON by default
     seagrassGroup = L.layerGroup();            // FWC seagrass beds — auto-on with the Scallops chip
-    spotRingLayer = L.layerGroup().addTo(map); // range rings around the last-clicked spot
+    spotRingLayer = L.layerGroup();            // rings around the last-clicked spot
 
     // NOAA BlueTopo — national best-available bathymetry (public domain).
     // Color depth model + hillshade relief, tiled via nowCOAST WMTS.
@@ -152,20 +152,39 @@
       gradient: { 0.2: "#10314a", 0.4: "#1b6f8a", 0.6: "#2ec4b6", 0.78: "#ffd166", 0.92: "#ef476f" } }).addTo(map);
     zoneLayer = L.layerGroup().addTo(map);
     spotLayer = L.layerGroup().addTo(map);
-    ringLayer = L.layerGroup().addTo(map);
+    ringLayer = L.layerGroup();                // launch-distance rings
+    ringsGroup = L.layerGroup([ringLayer, spotRingLayer]).addTo(map); // one toggle for both ring kinds
     tripLayer = L.layerGroup().addTo(map);
     rigLayer = L.layerGroup().addTo(map);      // full BOEM platform field (Venice region)
 
-    L.control.layers(
+    // Plain-language layer list, most-used first. Oil platforms are added per
+    // region by switchRegion (they only exist off Venice).
+    layerCtl = L.control.layers(
       { "Ocean chart": L.layerGroup([ocean, oceanRef]), "Satellite": L.layerGroup([sat, satRef]), "Streets": osm },
-      { "Heatmap": heatLayer, "Spots": spotLayer, "Areas": zoneLayer, "Launch range rings": ringLayer,
-        "Spot range rings": spotRingLayer, "Oil platforms (BOEM)": rigLayer,
-        "Depth contours (chart)": contourGroup, "Soundings + contours (computed)": depthGroup,
-        "Depth model (BlueTopo)": bathyGroup,
+      { "Bite heatmap": heatLayer, "Spots": spotLayer, "Fishing areas": zoneLayer,
+        "Range rings": ringsGroup,
+        "Depth soundings & contours": depthGroup,
+        "NOAA chart contours": contourGroup,
+        "Shaded relief (BlueTopo)": bathyGroup,
         "Seagrass beds (FWC)": seagrassGroup,
-        "My charts": chartGroup, "NOAA ENC chart (full)": encGroup },
+        "My charts": chartGroup, "Full NOAA chart (ENC)": encGroup },
       { collapsed: true }
     ).addTo(map);
+    if (state.region === "venice") layerCtl.addOverlay(rigLayer, "Oil platforms");
+    else map.removeLayer(rigLayer);
+
+    // Tiny legend so the heatmap colors mean something at a glance
+    const heatLegend = el("div", "heatLegend", 'bite signal&nbsp; low <span class="hlbar"></span> high');
+    map.getContainer().appendChild(heatLegend);
+    const syncLegend = () => { heatLegend.style.display = map.hasLayer(heatLayer) ? "" : "none"; };
+    map.on("overlayadd overlayremove", syncLegend);
+    syncLegend();
+
+    // Leaflet stamps inline position:relative on the container at init, which
+    // would forever override the mobile stylesheet's position:absolute sizing
+    // (rotate/resize desktop→mobile collapsed the map to 0 height). The
+    // stylesheet owns position for both layouts now.
+    map.getContainer().style.position = "";
 
     // NOAA ENC services are dynamic exports — re-render on pan/zoom while enabled
     map.on("moveend", () => { Charts.encRefresh(map, encGroup); Charts.contoursRefresh(map, contourGroup); Charts.seagrassRefresh(map, seagrassGroup); depthRefresh(); });
@@ -739,7 +758,8 @@
     card5.append(el("h3", null, "What you can keep — " + fmtD(d)));
     const shortDate = iso => new Date(iso + "T12:00").toLocaleDateString([], { month: "short", day: "numeric" });
     const closed = [];
-    for (const sp of DATA_CORE.species) {
+    const regionalIds = new Set(regionObj().species);
+    for (const sp of DATA_CORE.species.filter(s => regionalIds.has(s.id))) {
       const st = Scoring.isOpen(sp.id, d);
       const reg = (window.DATA_REGS && DATA_REGS.species[sp.id]) || null;
       if (st.open) {
@@ -752,7 +772,7 @@
       }
     }
     if (closed.length) card5.append(el("div", "small", "<br>🔴 <b>Closed:</b> " + closed.join(" · ")));
-    card5.append(el("div", "muted small", "Aggregate rules, state-water differences & FWC links on the Seasons tab. Verify before you keep fish."));
+    card5.append(el("div", "muted small", regionObj().name + " species shown — every species, aggregate rules & FWC links on the Seasons tab. Verify before you keep fish."));
     root.append(card5);
 
     /* --- top spots --- */
@@ -1013,8 +1033,13 @@
         .sort((a, b) => b.al.score - a.al.score);
       alignCache = { key: cacheKey, rows: all };
     }
-    const rows = all.slice(0, 30);
-    if (all.length > 30) card.append(el("div", "muted small", "Showing the top 30 of " + all.length + " by alignment — all are on the map."));
+    const CAP = 12;
+    const rows = state.alignShowAll ? all : all.slice(0, CAP);
+    if (all.length > CAP) {
+      const more = el("button", null, state.alignShowAll ? "Show top " + CAP + " only" : "Show all " + all.length + " by alignment");
+      more.onclick = () => { state.alignShowAll = !state.alignShowAll; renderTab(); };
+      card.append(more);
+    }
     for (const r of rows) {
       const cls = r.al.score >= 70 ? "open" : r.al.score >= 45 ? "gB" : "gC";
       const depth = r.s.depth_ft == null ? "" : (Array.isArray(r.s.depth_ft) ? r.s.depth_ft.join("–") : r.s.depth_ft) + " ft · ";
@@ -1030,8 +1055,16 @@
   }
 
   function renderSpots(root) {
-    renderImportCard(root);
-    renderMyChartsCard(root);
+    // Import UIs fold away once you have data — the tab leads with what you
+    // came for (your alignment list + the public spot browser).
+    const hasData = window.USER_SPOTS.length || Charts.list().length;
+    const fold = el("details", "fold");
+    if (!hasData) fold.open = true;
+    fold.append(el("summary", null, "➕ Add my data — waypoints & sonar charts" +
+      (hasData ? ' <span class="muted small">(' + [USER_SPOTS.length ? USER_SPOTS.length + " spots" : "", Charts.list().length ? Charts.list().length + " charts" : ""].filter(Boolean).join(" · ") + ")</span>" : "")));
+    renderImportCard(fold);
+    renderMyChartsCard(fold);
+    root.append(fold);
     renderMySpotsList(root);
     const search = el("input"); search.id = "spotSearch"; search.placeholder = "Search public spots…"; search.type = "search";
     root.append(search);
@@ -1116,25 +1149,45 @@
   /* ================= SEASONS tab ================= */
   function renderSeasons(root) {
     const d = state.date;
-    root.append(el("div", "muted small", "Status shown for <b>" + fmtD(d) + "</b>, private recreational angler, Gulf reef fish. Data compiled " + DATA_REGS.as_of + ". <b>Always verify before you keep fish.</b>"));
+    root.append(el("div", "muted small", "Status shown for <b>" + fmtD(d) + "</b>, private recreational angler. Data compiled " + DATA_REGS.as_of + ". <b>Always verify before you keep fish.</b>"));
+
+    const regTable = ids => {
+      const tbl = el("table", "regs");
+      tbl.innerHTML = "<tr><th>Species</th><th>Today</th><th>2026 season</th><th>Bag / size</th></tr>";
+      for (const id of ids) {
+        const reg = DATA_REGS.species[id];
+        const st = Scoring.isOpen(id, d);
+        const tr = el("tr", st.open ? "" : "closedRow");
+        const seasons = (reg.open && reg.open.length) ? reg.open.map(w => w.start.slice(5) + " → " + w.end.slice(5) + (w.note ? " (" + w.note + ")" : "")).join("<br>") : "Closed 2026";
+        tr.innerHTML = "<td><b>" + reg.name + "</b>" + (reg.needs_verification ? ' <span class="badge gB" title="Could not fully verify for 2026">verify</span>' : "") + "</td>" +
+          "<td>" + (st.open ? '<span class="badge open">OPEN</span>' : '<span class="badge closed">CLOSED</span>') + "</td>" +
+          '<td class="small">' + seasons + "</td>" +
+          '<td class="small">' + reg.bag + "<br>" + reg.size + (reg.agg ? '<br><span class="muted">' + reg.agg + "</span>" : "") +
+          (reg.url ? '<br><a href="' + reg.url + '" target="_blank" rel="noopener">FWC/NOAA rule ↗</a>' : "") + "</td>";
+        tbl.append(tr);
+      }
+      return tbl;
+    };
+
+    // Your region's species up front; everything else folded away
+    const mine = new Set(regionObj().species);
+    const all = Object.keys(DATA_REGS.species);
+    const regionIds = all.filter(id => mine.has(id));
+    const otherIds = all.filter(id => !mine.has(id));
+
     const card = el("div", "card");
-    const tbl = el("table", "regs");
-    tbl.innerHTML = "<tr><th>Species</th><th>Today</th><th>2026 season</th><th>Bag / size</th></tr>";
-    const ids = Object.keys(DATA_REGS.species);
-    for (const id of ids) {
-      const reg = DATA_REGS.species[id];
-      const st = Scoring.isOpen(id, d);
-      const tr = el("tr", st.open ? "" : "closedRow");
-      const seasons = (reg.open && reg.open.length) ? reg.open.map(w => w.start.slice(5) + " → " + w.end.slice(5) + (w.note ? " (" + w.note + ")" : "")).join("<br>") : "Closed 2026";
-      tr.innerHTML = "<td><b>" + reg.name + "</b>" + (reg.needs_verification ? ' <span class="badge gB" title="Could not fully verify for 2026">verify</span>' : "") + "</td>" +
-        "<td>" + (st.open ? '<span class="badge open">OPEN</span>' : '<span class="badge closed">CLOSED</span>') + "</td>" +
-        '<td class="small">' + seasons + "</td>" +
-        '<td class="small">' + reg.bag + "<br>" + reg.size + (reg.agg ? '<br><span class="muted">' + reg.agg + "</span>" : "") +
-        (reg.url ? '<br><a href="' + reg.url + '" target="_blank" rel="noopener">FWC/NOAA rule ↗</a>' : "") + "</td>";
-      tbl.append(tr);
-    }
-    card.append(tbl);
+    card.append(el("h3", null, regionObj().name + " species"));
+    card.append(regTable(regionIds.length ? regionIds : all));
     root.append(card);
+
+    if (regionIds.length && otherIds.length) {
+      const fold = el("details", "fold");
+      fold.append(el("summary", null, "All other species (" + otherIds.length + ")"));
+      const c2 = el("div", "card");
+      c2.append(regTable(otherIds));
+      fold.append(c2);
+      root.append(fold);
+    }
 
     const g = el("div", "card");
     g.append(el("h3", null, "Gear & permits (federal Gulf reef fish)"));
@@ -1145,16 +1198,6 @@
 
   /* ================= INTEL tab ================= */
   function renderIntel(root) {
-    const card0 = el("div", "card");
-    card0.append(el("h3", null, "How predictions work"));
-    card0.append(el("div", "small",
-      "Spot scores blend: <b>structure quality</b> (species ratings per spot), <b>coordinate confidence</b> " +
-      '(<span class="badge gA">A</span> published numbers · <span class="badge gB">B</span> multi-source · <span class="badge gC">C</span> approximate area), ' +
-      "<b>seasonal depth fit</b> for the month, <b>fresh reports</b> (3-week half-life decay), and <b>season legality</b>. " +
-      "Day outlook blends seas vs your limit, wind, moon/solunar, tide swing, offshore current and pressure trend. " +
-      "<b>Your imported spots are overlay-only</b> — they never feed the scores or heatmap; instead each gets an <i>alignment</i> readout showing how the public signal agrees with it."));
-    root.append(card0);
-
     const regionReports = DATA_REPORTS.filter(r => (r.region || "tampa") === state.region);
     const card = el("div", "card");
     card.append(el("h3", null, "Recent intel feed — " + regionObj().name + " (" + regionReports.length + " reports)"));
@@ -1182,16 +1225,27 @@
       root.append(w);
     }
 
-    const sci = el("div", "card");
-    sci.append(el("h3", null, "Bite science cheat sheet"));
+    // Reference material folds away — the feed above is what this tab is for
+    const foldHow = el("details", "fold");
+    foldHow.append(el("summary", null, "How predictions work"));
+    foldHow.append(el("div", "small",
+      "Spot scores blend: <b>structure quality</b> (species ratings per spot), <b>coordinate confidence</b> " +
+      '(<span class="badge gA">A</span> published numbers · <span class="badge gB">B</span> multi-source · <span class="badge gC">C</span> approximate area), ' +
+      "<b>seasonal depth fit</b> for the month, <b>fresh reports</b> (3-week half-life decay), and <b>season legality</b>. " +
+      "Day outlook blends seas vs your limit, wind, moon/solunar, tide swing, offshore current and pressure trend. " +
+      "<b>Your imported spots are overlay-only</b> — they never feed the scores or heatmap; instead each gets an <i>alignment</i> readout showing how the public signal agrees with it."));
+    root.append(foldHow);
+
+    const foldSci = el("details", "fold");
+    foldSci.append(el("summary", null, "Bite science cheat sheet"));
     for (const fct of DATA_SCIENCE.factors) {
-      sci.append(el("div", "report", "<b>" + fct.title + "</b><div class='rdetail'>" + fct.detail +
+      foldSci.append(el("div", "report", "<b>" + fct.title + "</b><div class='rdetail'>" + fct.detail +
         (fct.sources && fct.sources.length ? " " + fct.sources.map(s => '<a href="' + s + '" target="_blank" rel="noopener">↗</a>').join(" ") : "") + "</div>"));
     }
-    root.append(sci);
+    root.append(foldSci);
 
     const dis = el("div", "card disclaimer",
-      "<b>Read me:</b> This is a fishing **planning** tool built from public reports, published reef coordinates and free forecast models — not a navigation product and not a guarantee of fish. " +
+      "<b>Read me:</b> This is a fishing <b>planning</b> tool built from public reports, published reef coordinates and free forecast models — not a navigation product and not a guarantee of fish. " +
       "Coordinates graded A are from official public lists; B/C are community-reported or approximate areas — always verify structure on your sounder before anchoring. " +
       "Forecasts (waves, current, SST) are model output (Open-Meteo) and NOAA tide predictions; conditions offshore can differ — check the NWS marine forecast and radar before departing, file a float plan, and verify seasons/limits with FWC on the day. " +
       "Data compiled: " + DATA_CORE.built + ". Ask Claude to refresh the data files to pull newer reports.");
@@ -1260,7 +1314,9 @@
       const o = document.createElement("option"); o.value = l.id; o.textContent = l.name; lsel.append(o);
     });
     const saved = localStorage.getItem("GBI_LAUNCH");
-    state.launchId = regionLaunches().some(l => l.id === saved) ? saved : regionLaunches()[0].id;
+    const def = regionObj().defaultLaunch;
+    state.launchId = regionLaunches().some(l => l.id === saved) ? saved
+      : (def && regionLaunches().some(l => l.id === def)) ? def : regionLaunches()[0].id;
     lsel.value = state.launchId;
   }
 
@@ -1299,6 +1355,12 @@
     alignCache = { key: "", rows: null };
     populateLaunches();
     buildChips();
+    // Oil platforms only exist off Venice — keep the layer list clean elsewhere
+    if (layerCtl) {
+      layerCtl.removeLayer(rigLayer);
+      if (id === "venice") { layerCtl.addOverlay(rigLayer, "Oil platforms"); if (!map.hasLayer(rigLayer)) map.addLayer(rigLayer); }
+      else if (map.hasLayer(rigLayer)) map.removeLayer(rigLayer);
+    }
     const R = regionObj();
     map.setView(R.center, R.zoom);
     refreshAll();

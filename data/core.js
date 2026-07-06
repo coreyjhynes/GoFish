@@ -30,7 +30,7 @@ window.DATA_CORE = {
   // Spots/zones carry a `region` field ('tampa' when absent).
   regions: [
     { id: "tampa", name: "Tampa Bay → Hudson", center: [28.05, -83.45], zoom: 8,
-      fpBearing: 262, fpMiles: 35,
+      fpBearing: 262, fpMiles: 35, defaultLaunch: "anclote",
       distanceRef: { name: "Anclote River entrance", short: "Anclote entrance", lat: 28.1700, lon: -82.8000 },
       species: ["red_snapper", "mangrove_snapper", "gag_grouper", "red_grouper", "scamp", "lane_snapper", "vermilion_snapper", "amberjack", "bay_scallop"] },
     { id: "venice", name: "Venice, LA — the Delta", center: [28.80, -89.15], zoom: 8,
@@ -38,7 +38,7 @@ window.DATA_CORE = {
       distanceRef: { name: "South Pass mouth", short: "South Pass", lat: 28.990, lon: -89.140 },
       species: ["yellowfin_tuna", "blackfin_tuna", "mahi", "wahoo", "swordfish", "mangrove_snapper", "amberjack"] },
     { id: "keys", name: "Florida Keys (Marathon)", center: [24.72, -81.00], zoom: 9,
-      fpBearing: 155, fpMiles: 20,
+      fpBearing: 155, fpMiles: 20, defaultLaunch: "marathon",
       distanceRef: null, // Keys span 100+ mi — distances follow the selected launch
       species: ["mahi", "blackfin_tuna", "wahoo", "swordfish", "yellowtail_snapper", "mangrove_snapper", "amberjack", "hogfish"] }
   ],
