@@ -630,8 +630,12 @@
   function buildComputedSpots() {
     if (!window.LEDGES_TAMPA || window.__computedBuilt) return;
     window.__computedBuilt = true;
-    const L = window.LEDGES_TAMPA;
-    const add = (f, kind, i) => {
+    // dedup: focus-band finds are skipped if they sit on top of a shelf-wide find
+    const pushed = [];
+    const near = (la, lo) => pushed.some(p => Math.pow((p.lat - la) * 69, 2) + Math.pow((p.lon - lo) * 60.8, 2) < 0.35 * 0.35);
+
+    const add = (f, kind, i, focus) => {
+      if (focus && near(f.lat, f.lon)) return;
       const type = kind === "ledge" ? "ledge" : kind === "hole" ? "hole" : "hard_bottom";
       const top = f.relief >= 30 ? 4 : f.relief >= 18 ? 3 : 2;
       const kn = kind === "ledge" ? "Ledge" : kind === "hole" ? "Hole" : "Hard-bottom rise";
@@ -640,29 +644,27 @@
                 : kind === "ledge" ? "a steep drop-off (~" + f.slope + " ft/mi) with " + Math.round(f.relief) + " ft of relief"
                 : "hard bottom standing ~" + Math.round(Math.abs(f.resid)) + " ft above the surrounding sand";
       DATA_SPOTS.push({
-        id: "cmp_" + kind + i, name, lat: f.lat, lon: f.lon, depth_ft: f.depth,
+        id: (focus ? "fdem_" : "cmp_") + kind + i, name, lat: f.lat, lon: f.lon, depth_ft: f.depth,
         relief_ft: Math.round(f.relief), type, grade: f.grade, region: "tampa", computed: true,
         species: speciesForDepth(f.depth, kind, top),
-        notes: "Computed from NOAA DEM terrain analysis — " + how + ". Not a charted or verified spot: " +
-          "idle over it on your sounder to confirm hard bottom before you fish it."
+        notes: "Computed from NOAA DEM terrain analysis — " + how + "." +
+          (focus ? " High-detail pass over the 40–60 mi band N of the pipeline." : "") +
+          " Not a charted or verified spot: idle over it on your sounder to confirm before you fish it."
       });
+      pushed.push({ lat: f.lat, lon: f.lon });
     };
-    (L.rises || []).forEach((f, i) => add(f, "rise", i));
-    (L.ledges || []).forEach((f, i) => add(f, "ledge", i));
-    (L.holes || []).forEach((f, i) => add(f, "hole", i));
 
-    // CSB anomalies (data/csb_anomalies_tampa.js): places where multiple crowd-
-    // sonar tracks disagree with the depth model. f.depth = model/chart depth,
-    // f.anom = model − crowd (signed); the depth your sounder actually reads is
-    // depth − anom. These are the strongest "uncharted" signal — real vessels,
-    // real echoes, independently agreeing — so they get a distinct name.
-    (window.CSB_ANOMALIES_TAMPA || []).forEach((f, i) => {
+    // CSB anomalies: cells where multiple crowd-sonar tracks disagree with the depth
+    // model. f.depth = model/chart depth, f.anom = model − crowd (signed); the depth
+    // your sounder actually reads is depth − anom. Strongest "uncharted" signal.
+    const addCSB = (f, i, focus) => {
+      if (focus && near(f.lat, f.lon)) return;
       const crowd = Math.round(f.depth - f.anom);
       const diff = Math.abs(Math.round(f.anom));
       const type = f.kind === "rise" ? "hard_bottom" : "hole";
       const top = diff >= 25 ? 4 : diff >= 16 ? 3 : 2;
       DATA_SPOTS.push({
-        id: "csb_" + i, name: (f.kind === "rise" ? "Crowd-sonar rise " : "Crowd-sonar hole ") + crowd + " ft",
+        id: (focus ? "fcsb_" : "csb_") + i, name: (f.kind === "rise" ? "Crowd-sonar rise " : "Crowd-sonar hole ") + crowd + " ft",
         lat: f.lat, lon: f.lon, depth_ft: crowd, type, grade: f.grade, region: "tampa", computed: true, csb: true,
         species: speciesForDepth(crowd, f.kind, top),
         notes: f.tracks + " independent crowd-sonar tracks read " + diff + " ft " +
@@ -670,7 +672,25 @@
           (f.kind === "rise" ? "hard bottom or structure" : "hole/depression") +
           ". Crowdsourced (NOAA DCDB); idle over it on your sounder to confirm."
       });
-    });
+      pushed.push({ lat: f.lat, lon: f.lon });
+    };
+
+    // Shelf-wide passes first (they own their territory)
+    const L = window.LEDGES_TAMPA;
+    (L.rises || []).forEach((f, i) => add(f, "rise", i));
+    (L.ledges || []).forEach((f, i) => add(f, "ledge", i));
+    (L.holes || []).forEach((f, i) => add(f, "hole", i));
+    (window.CSB_ANOMALIES_TAMPA || []).forEach((f, i) => addCSB(f, i));
+
+    // Focused 40–60 mi band, high-detail pass — adds the subtler structure the
+    // shelf-wide scan missed; deduped against everything above.
+    const F = window.FOCUS_DEM_TAMPA;
+    if (F) {
+      (F.rises || []).forEach((f, i) => add(f, "rise", 900 + i, true));
+      (F.ledges || []).forEach((f, i) => add(f, "ledge", 900 + i, true));
+      (F.holes || []).forEach((f, i) => add(f, "hole", 900 + i, true));
+    }
+    (window.FOCUS_CSB_TAMPA || []).forEach((f, i) => addCSB(f, 900 + i, true));
   }
 
   /* ---- known structure field: FWC artificial reefs + NOAA ENC wrecks (Tampa) ----
