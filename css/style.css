@@ -257,8 +257,10 @@ hr.thin { border: none; border-top: 1px solid var(--line); margin: 9px 0; }
 .statusmsg { font-size: .78rem; color: var(--dim); font-style: italic; }
 .bigmoon { font-size: 1.9rem; line-height: 1; }
 
-/* ENC contour overlay: chart lines/labels are black — invert to white for the dark map */
-.enc-invert { filter: invert(1) brightness(1.35); }
+/* ENC contour overlay: chart lines/labels are black — ink-on-paper, correct on the
+   light Ocean/Streets bases. Only when the basemap is actually dark (Satellite or
+   BlueTopo on) does .dark-base invert them to white. */
+.dark-base .enc-invert { filter: invert(1) brightness(1.35); }
 /* FWC seagrass beds — punch the greens so they read over satellite/dark water */
 .seagrass-ov { filter: saturate(1.35) brightness(1.1); }
 
@@ -296,19 +298,33 @@ hr.thin { border: none; border-top: 1px solid var(--line); margin: 9px 0; }
   pointer-events: none;
 }
 
-/* computed soundings + contour labels (data/depth_tampa.js) */
+/* computed soundings + contour labels (data/depth_tampa.js).
+   Default = dark ink with a paper halo for the light Ocean/Streets bases;
+   .dark-base (Satellite or BlueTopo) flips to light ink with a dark halo. */
 .snd, .clab { width: 0; height: 0; pointer-events: none; }
 .snd span {
   display: block; width: max-content; transform: translate(-50%, -50%);
   font: 600 10px/1 Consolas, "Cascadia Mono", monospace;
+  color: #063445;
+  text-shadow: 0 0 3px rgba(255,255,255,.95), 0 1px 2px rgba(255,255,255,.95), 0 0 5px rgba(255,255,255,.8);
+}
+.dark-base .snd span {
   color: #9fd9e8; text-shadow: 0 0 3px #04121c, 0 1px 3px #04121c, 0 0 6px #04121c;
 }
 .clab span {
   display: block; width: max-content; transform: translate(-50%, -50%);
-  font: 700 9.5px/1 system-ui, sans-serif; color: #06222e;
-  background: rgba(78, 191, 205, .88); border-radius: 7px; padding: 1px 5px;
+  font: 700 9.5px/1 system-ui, sans-serif; color: #fff;
+  background: rgba(9, 84, 100, .9); border-radius: 7px; padding: 1px 5px;
 }
-.clab.maj span { background: rgba(143, 232, 244, .95); }
+.clab.maj span { background: rgba(4, 55, 68, .95); }
+.dark-base .clab span { color: #06222e; background: rgba(78, 191, 205, .88); }
+.dark-base .clab.maj span { background: rgba(143, 232, 244, .95); }
+
+/* computed contour polylines — stroke set here so it can follow the base theme */
+.cline { stroke: #0b6b7e; }
+.cline.maj { stroke: #05505f; }
+.dark-base .cline { stroke: #3fa7b8; }
+.dark-base .cline.maj { stroke: #7fe3f0; }
 
 /* map search control */
 .map-search { position: relative; }

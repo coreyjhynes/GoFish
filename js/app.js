@@ -61,8 +61,9 @@
     const maj = ft => ft % 60 === 0; // emphasize 60/120/180 — 120 ft is the Feb–Mar SWG closure line
     CONTOURS_TAMPA.forEach(c => c.paths.forEach(path =>
       depthGroup.addLayer(L.polyline(path, {
-        color: maj(c.ft) ? "#7fe3f0" : "#3fa7b8", weight: maj(c.ft) ? 1.9 : 1.1,
-        opacity: maj(c.ft) ? 0.85 : 0.62, interactive: false, smoothFactor: 1.25
+        className: maj(c.ft) ? "cline maj" : "cline", // stroke color lives in CSS → follows base theme
+        color: maj(c.ft) ? "#05505f" : "#0b6b7e", weight: maj(c.ft) ? 1.9 : 1.2,
+        opacity: maj(c.ft) ? 0.9 : 0.7, interactive: false, smoothFactor: 1.25
       }))));
   }
 
@@ -173,10 +174,19 @@
       if (e.layer === contourGroup) Charts.contoursRefresh(map, contourGroup);
       if (e.layer === seagrassGroup) Charts.seagrassRefresh(map, seagrassGroup);
       if (e.layer === depthGroup) depthRefresh();
+      if (e.layer === bathyGroup) setMapTheme();
     });
     map.whenReady(() => setTimeout(() => { Charts.contoursRefresh(map, contourGroup); depthRefresh(); }, 400));
 
-    map.on("baselayerchange", e => { /* keep ref labels with ocean */ });
+    // Ink theme for depth detail + ENC contours: dark ink on the light bases
+    // (Ocean chart / Streets), light ink only when the water is actually dark
+    // (Satellite base, or the BlueTopo depth model layered on).
+    let satBase = false;
+    const setMapTheme = () =>
+      map.getContainer().classList.toggle("dark-base", satBase || map.hasLayer(bathyGroup));
+    map.on("baselayerchange", e => { satBase = e.name === "Satellite"; setMapTheme(); });
+    map.on("overlayremove", e => { if (e.layer === bathyGroup) setMapTheme(); });
+    setMapTheme();
 
     // Range rings follow the last-clicked spot and persist (toggle off via layer control); rescale on zoom
     map.on("popupopen", e => {
