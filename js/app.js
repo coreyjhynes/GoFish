@@ -48,7 +48,7 @@
   }
 
   /* ================= map ================= */
-  let map, heatLayer, spotLayer, zoneLayer, ringLayer, ringsGroup, fpMarker, chartGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas, depthGroup, depthLabels, layerCtl;
+  let map, heatLayer, spotLayer, zoneLayer, ringLayer, ringsGroup, fpMarker, chartGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas, depthGroup, depthLabels, layerCtl, structLayer, structCanvas, hardbottomGroup;
 
   // Computed depth detail — the 10,353-point sounding lattice + marching-squares
   // contours harvested from NOAA's DEM into data/depth_tampa.js. Pure vectors, so
@@ -138,6 +138,8 @@
     contourGroup = L.layerGroup();             // ENC chart contours — opt-in; the computed layer covers the default view
     initDepthDetail();                         // computed sounding lattice + contours — ON by default
     seagrassGroup = L.layerGroup();            // FWC seagrass beds — auto-on with the Scallops chip
+    hardbottomGroup = L.layerGroup();          // FWC West FL Shelf hard-bottom habitat — opt-in
+    structLayer = L.layerGroup();              // FWC reefs + NOAA wrecks (Tampa) — opt-in, ~1,100 dots
     spotRingLayer = L.layerGroup();            // rings around the last-clicked spot
 
     // NOAA BlueTopo — national best-available bathymetry (public domain).
@@ -162,8 +164,10 @@
     layerCtl = L.control.layers(
       { "Ocean chart": L.layerGroup([ocean, oceanRef]), "Satellite": L.layerGroup([sat, satRef]), "Streets": osm },
       { "Bite heatmap": heatLayer, "Spots": spotLayer, "Fishing areas": zoneLayer,
+        "Reefs & wrecks": structLayer,
         "Range rings": ringsGroup,
         "Depth soundings & contours": depthGroup,
+        "Hard bottom (FWC)": hardbottomGroup,
         "NOAA chart contours": contourGroup,
         "Shaded relief (BlueTopo)": bathyGroup,
         "Seagrass beds (FWC)": seagrassGroup,
@@ -187,11 +191,12 @@
     map.getContainer().style.position = "";
 
     // NOAA ENC services are dynamic exports — re-render on pan/zoom while enabled
-    map.on("moveend", () => { Charts.encRefresh(map, encGroup); Charts.contoursRefresh(map, contourGroup); Charts.seagrassRefresh(map, seagrassGroup); depthRefresh(); });
+    map.on("moveend", () => { Charts.encRefresh(map, encGroup); Charts.contoursRefresh(map, contourGroup); Charts.seagrassRefresh(map, seagrassGroup); Charts.hardbottomRefresh(map, hardbottomGroup); depthRefresh(); });
     map.on("overlayadd", e => {
       if (e.layer === encGroup) Charts.encRefresh(map, encGroup);
       if (e.layer === contourGroup) Charts.contoursRefresh(map, contourGroup);
       if (e.layer === seagrassGroup) Charts.seagrassRefresh(map, seagrassGroup);
+      if (e.layer === hardbottomGroup) Charts.hardbottomRefresh(map, hardbottomGroup);
       if (e.layer === depthGroup) depthRefresh();
       if (e.layer === bathyGroup) setMapTheme();
     });
@@ -252,14 +257,14 @@
 
   function typeLabel(t) {
     return { wreck: "Wreck", artificial_reef: "Artificial reef", barge: "Barge", tower: "Tower", rubble: "Rubble",
-      ledge: "Ledge", hard_bottom: "Hard bottom", spring: "Spring", area_center: "Area", lump: "Lump",
+      ledge: "Ledge", hard_bottom: "Hard-bottom rise", hole: "Hole / sinkhole", spring: "Spring", area_center: "Area", lump: "Lump",
       ledge_belt: "Ledge belt", natural_area: "Natural area", hapc: "Protected area (HAPC)", user: "My spot",
       no_take: "NO-TAKE reserve", scallop_zone: "Scallop harvest zone", scallop_flat: "Scallop flat",
       oil_rig: "Oil rig / floater", lump: "Hump / lump", deep_drop: "Deep-drop grounds", reef_light: "Reef light",
       troll_corridor: "Trolling corridor" }[t] || t;
   }
   function pinLetter(t) {
-    return { wreck: "W", artificial_reef: "R", barge: "B", tower: "T", rubble: "R", ledge: "L", hard_bottom: "H", spring: "S", area_center: "A", user: "★", scallop_flat: "S", oil_rig: "O", lump: "H", deep_drop: "D", reef_light: "✦" }[t] || "•";
+    return { wreck: "W", artificial_reef: "R", barge: "B", tower: "T", rubble: "R", ledge: "L", hard_bottom: "H", hole: "○", spring: "S", area_center: "A", user: "★", scallop_flat: "S", oil_rig: "O", lump: "H", deep_drop: "D", reef_light: "✦" }[t] || "•";
   }
   function allSpots() { return DATA_SPOTS.concat(window.USER_SPOTS || []); }
 
@@ -509,7 +514,7 @@
       const relevant = state.species === "all" || (s.species[state.species] || 0) > 0;
       const icon = L.divIcon({
         className: "",
-        html: '<div class="pin t-' + s.type + " g" + s.grade + (relevant ? "" : " dim") + '">' + pinLetter(s.type) + "</div>",
+        html: '<div class="pin t-' + s.type + " g" + s.grade + (s.computed ? " computed" : "") + (relevant ? "" : " dim") + '">' + pinLetter(s.type) + "</div>",
         iconSize: [22, 22], iconAnchor: [11, 11]
       });
       const m = L.marker([s.lat, s.lon], { icon });
@@ -603,6 +608,95 @@
       onRightClick(m, () => rigPopup(la, lo, label));
       m.addTo(rigLayer);
     }
+  }
+
+  /* ---- Tier-2 computed structure (data/ledges_tampa.js) as scouting spots ----
+     Rises/ledges/holes found by terrain analysis of the NOAA DEM. They join
+     DATA_SPOTS so they rank, feed the heatmap, feed My-Spots alignment, and are
+     searchable — but graded B/C with no report boost, so proven curated spots
+     always outrank them. They read as "worth idling over," not "go here." */
+  function speciesForDepth(d, kind, top) {
+    d = d || 90;
+    let list;
+    if (d < 70)       list = kind === "hole" ? ["gag_grouper","red_grouper","mangrove_snapper","lane_snapper"]
+                                              : ["gag_grouper","mangrove_snapper","red_grouper","lane_snapper"];
+    else if (d < 120) list = ["red_grouper","gag_grouper","red_snapper","mangrove_snapper","scamp"];
+    else if (d < 200) list = ["red_snapper","scamp","red_grouper","amberjack","vermilion_snapper"];
+    else              list = ["scamp","vermilion_snapper","amberjack","red_snapper"];
+    const m = {};
+    list.forEach((sp, i) => { m[sp] = i === 0 ? top : i === 1 ? Math.max(1, top - 1) : Math.max(1, top - 2); });
+    return m;
+  }
+  function buildComputedSpots() {
+    if (!window.LEDGES_TAMPA || window.__computedBuilt) return;
+    window.__computedBuilt = true;
+    const L = window.LEDGES_TAMPA;
+    const add = (f, kind, i) => {
+      const type = kind === "ledge" ? "ledge" : kind === "hole" ? "hole" : "hard_bottom";
+      const top = f.relief >= 30 ? 4 : f.relief >= 18 ? 3 : 2;
+      const kn = kind === "ledge" ? "Ledge" : kind === "hole" ? "Hole" : "Hard-bottom rise";
+      const name = kn + " " + f.depth + " ft" + (f.relief >= 6 ? " · " + Math.round(f.relief) + " ft relief" : "");
+      const how = kind === "hole" ? "a depression ~" + Math.round(Math.abs(f.resid)) + " ft below the surrounding bottom"
+                : kind === "ledge" ? "a steep drop-off (~" + f.slope + " ft/mi) with " + Math.round(f.relief) + " ft of relief"
+                : "hard bottom standing ~" + Math.round(Math.abs(f.resid)) + " ft above the surrounding sand";
+      DATA_SPOTS.push({
+        id: "cmp_" + kind + i, name, lat: f.lat, lon: f.lon, depth_ft: f.depth,
+        relief_ft: Math.round(f.relief), type, grade: f.grade, region: "tampa", computed: true,
+        species: speciesForDepth(f.depth, kind, top),
+        notes: "Computed from NOAA DEM terrain analysis — " + how + ". Not a charted or verified spot: " +
+          "idle over it on your sounder to confirm hard bottom before you fish it."
+      });
+    };
+    (L.rises || []).forEach((f, i) => add(f, "rise", i));
+    (L.ledges || []).forEach((f, i) => add(f, "ledge", i));
+    (L.holes || []).forEach((f, i) => add(f, "hole", i));
+  }
+
+  /* ---- known structure field: FWC artificial reefs + NOAA ENC wrecks (Tampa) ----
+     ~1,100 points — canvas dots, off by default, click for detail. Not scored
+     (they're published/known, not intel to rank); this is "show me everything
+     that's down there." */
+  function drawStructure() {
+    if (!structLayer) return;
+    structLayer.clearLayers();
+    if (state.region !== "tampa") return;
+    if (!structCanvas) structCanvas = L.canvas({ padding: 0.3, tolerance: 6 });
+    for (const r of (window.REEFS_TAMPA || [])) {
+      const m = L.circleMarker([r.lat, r.lon], { renderer: structCanvas, radius: 3.4,
+        color: "#3a2400", weight: 1, fillColor: "#f4a259", fillOpacity: 0.92 });
+      onLeftClick(m, () => structPopup("reef", r));
+      onRightClick(m, () => structPopup("reef", r));
+      m.addTo(structLayer);
+    }
+    for (const w of (window.WRECKS_TAMPA || [])) {
+      const m = L.circleMarker([w.lat, w.lon], { renderer: structCanvas, radius: 3,
+        color: "#12202c", weight: 1, fillColor: w.kind === "wreck" ? "#c9d4dc" : "#8798a4", fillOpacity: 0.9 });
+      onLeftClick(m, () => structPopup("wreck", w));
+      onRightClick(m, () => structPopup("wreck", w));
+      m.addTo(structLayer);
+    }
+  }
+  function structPopup(kind, o) {
+    const ref = distRef();
+    const title = (kind === "reef" ? (o.name || "Artificial reef") : (o.name || (o.kind === "wreck" ? "Unnamed wreck" : "Obstruction"))).replace(/'/g, "");
+    pendingRingName = title;
+    const dist = Scoring.haversineMi(ref.lat, ref.lon, o.lat, o.lon).toFixed(0);
+    const badges = kind === "reef"
+      ? '<span class="badge type">Artificial reef</span> <span class="badge gA">FWC</span>'
+      : '<span class="badge type">' + (o.kind === "wreck" ? "Wreck" : "Obstruction") + '</span> <span class="badge gA">NOAA ENC</span>';
+    const body = kind === "reef"
+      ? [o.depth ? o.depth + " ft" : "", o.relief ? Math.round(o.relief) + " ft relief" : "", o.mat, o.county ? o.county + " Co." : "", o.yr].filter(Boolean).join(" · ") +
+        (o.desc ? '<div class="small muted">' + o.desc + "</div>" : "")
+      : (o.depth ? "Least depth over it ~" + o.depth + " ft" : "Depth uncharted — idle over it carefully");
+    L.popup({ maxWidth: 300 }).setLatLng([o.lat, o.lon]).setContent(
+      '<div class="pop"><h4>' + title + "</h4>" + badges +
+      '<div class="coords">' + o.lat.toFixed(5) + ", " + o.lon.toFixed(5) + "<br>" + Exporter.ddm(o.lat, true) + "&nbsp;&nbsp;" + Exporter.ddm(o.lon, false) + "</div>" +
+      '<div class="small">' + body + "</div>" +
+      '<div class="small muted">' + dist + " mi from " + (ref.short || ref.name) + "</div>" +
+      '<button onclick="App.copyCoords(' + o.lat.toFixed(6) + "," + o.lon.toFixed(6) + ')">📋 Copy GPS</button>' +
+      "<button onclick=\"App.setForecastPoint(" + o.lat.toFixed(5) + "," + o.lon.toFixed(5) + ",'" + title + "')\">🌊 Forecast here</button>" +
+      "<button onclick=\"App.addTripStop('" + title + "'," + o.lat.toFixed(6) + "," + o.lon.toFixed(6) + ')">➕ Add to trip</button></div>'
+    ).openOn(map);
   }
 
   function refreshHeat() {
@@ -1274,7 +1368,7 @@
   }
 
   function refreshAll() {
-    drawRings(); drawSpots(); drawZones(); drawRigs(); refreshHeat(); Trip.plot(); renderTab();
+    drawRings(); drawSpots(); drawZones(); drawRigs(); drawStructure(); refreshHeat(); Trip.plot(); renderTab();
   }
 
   let toastTimer;
@@ -1526,6 +1620,7 @@
     state.date = new Date(); state.date.setHours(12, 0, 0, 0);
     window.CURRENT_REGION = state.region; // scoring reads this for region filtering
     stage("userspots", () => UserSpots.load());
+    stage("computed", () => buildComputedSpots());
     stage("map", () => initMap());
     stage("trip", () => Trip.init({
       getLaunch: launch,

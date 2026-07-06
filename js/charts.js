@@ -262,5 +262,28 @@
     group.addLayer(ov);
   }
 
-  window.Charts = { importChartFile, importImage, render, setOpacity, opacity, list, removeChart, clearAllCharts, encRefresh, contoursRefresh, seagrassRefresh };
+  // FWC West Florida Shelf benthic habitats — mapped hard/live bottom on the
+  // shelf. Dynamic export like seagrass; the scientific "where is there rock"
+  // answer that complements the reef/wreck points and computed structure.
+  const HARDBOTTOM_URL = "https://gis.myfwc.com/hosting/rest/services/Open_Data/West_Florida_Shelf_Benthic_Habitats/MapServer/export";
+  function hardbottomRefresh(map, group) {
+    if (!map.hasLayer(group)) return;
+    const b = map.getBounds();
+    const sw = L.CRS.EPSG3857.project(b.getSouthWest());
+    const ne = L.CRS.EPSG3857.project(b.getNorthEast());
+    const size = map.getSize();
+    const k = Math.min(2, 2048 / Math.max(size.x, size.y));
+    const url = HARDBOTTOM_URL + "?bbox=" + [sw.x, sw.y, ne.x, ne.y].join(",") +
+      "&bboxSR=3857&imageSR=3857&size=" + Math.round(size.x * k) + "," + Math.round(size.y * k) +
+      "&format=png32&transparent=true&layers=show:13&f=image";
+    const ov = L.imageOverlay(url, b, { opacity: 0.55, interactive: false, className: "hardbottom-ov" });
+    ov.once("load", () => {
+      if (group._cur && group.hasLayer(group._cur)) group.removeLayer(group._cur);
+      group._cur = ov;
+    });
+    ov.once("error", () => { if (group.hasLayer(ov)) group.removeLayer(ov); });
+    group.addLayer(ov);
+  }
+
+  window.Charts = { importChartFile, importImage, render, setOpacity, opacity, list, removeChart, clearAllCharts, encRefresh, contoursRefresh, seagrassRefresh, hardbottomRefresh };
 })();
