@@ -650,6 +650,27 @@
     (L.rises || []).forEach((f, i) => add(f, "rise", i));
     (L.ledges || []).forEach((f, i) => add(f, "ledge", i));
     (L.holes || []).forEach((f, i) => add(f, "hole", i));
+
+    // CSB anomalies (data/csb_anomalies_tampa.js): places where multiple crowd-
+    // sonar tracks disagree with the depth model. f.depth = model/chart depth,
+    // f.anom = model − crowd (signed); the depth your sounder actually reads is
+    // depth − anom. These are the strongest "uncharted" signal — real vessels,
+    // real echoes, independently agreeing — so they get a distinct name.
+    (window.CSB_ANOMALIES_TAMPA || []).forEach((f, i) => {
+      const crowd = Math.round(f.depth - f.anom);
+      const diff = Math.abs(Math.round(f.anom));
+      const type = f.kind === "rise" ? "hard_bottom" : "hole";
+      const top = diff >= 25 ? 4 : diff >= 16 ? 3 : 2;
+      DATA_SPOTS.push({
+        id: "csb_" + i, name: (f.kind === "rise" ? "Crowd-sonar rise " : "Crowd-sonar hole ") + crowd + " ft",
+        lat: f.lat, lon: f.lon, depth_ft: crowd, type, grade: f.grade, region: "tampa", computed: true, csb: true,
+        species: speciesForDepth(crowd, f.kind, top),
+        notes: f.tracks + " independent crowd-sonar tracks read " + diff + " ft " +
+          (f.kind === "rise" ? "shallower" : "deeper") + " than the depth model here — likely uncharted " +
+          (f.kind === "rise" ? "hard bottom or structure" : "hole/depression") +
+          ". Crowdsourced (NOAA DCDB); idle over it on your sounder to confirm."
+      });
+    });
   }
 
   /* ---- known structure field: FWC artificial reefs + NOAA ENC wrecks (Tampa) ----
