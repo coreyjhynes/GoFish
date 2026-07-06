@@ -213,8 +213,41 @@ a:hover { text-decoration: underline; }
 .pin.t-lump { background: #ffd23f; }
 .pin.t-deep_drop { background: #7f5af0; color: #fff; }
 .pin.t-reef_light { background: #fff3a0; }
+/* category pins (map): color = what it is, shape/ring = how sure / whose */
+.pin.cat-wreck    { background: #b06fe0; }
+.pin.cat-reef     { background: #f4a259; border-radius: 5px; }
+.pin.cat-ledge    { background: #3ec6d0; }
+.pin.cat-spring   { background: #6db4ff; }
+.pin.cat-computed { background: #9aa7b3; border-style: dashed; }
+.pin.cat-csb      { background: #5ad17a; border-style: dashed; }
+.pin.cat-mine     { background: #ffd166; box-shadow: 0 0 7px rgba(255,209,102,.85), 0 1px 5px rgba(0,0,0,.6); }
 .pin.gC { opacity: .85; border-style: dashed; }
-.pin.dim { opacity: .35; }
+.pin.dim { opacity: .28; }
+
+/* Spot-types legend + filter panel */
+.spotfilter { width: 196px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.45); font-size: .8rem; }
+.sf-head { display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+  padding: 8px 11px; font-weight: 600; background: rgba(255,255,255,.05); user-select: none; }
+.sf-caret { transition: transform .2s; color: var(--accent); }
+.spotfilter.collapsed .sf-body { display: none; }
+.spotfilter.collapsed .sf-caret { transform: rotate(-90deg); }
+.sf-body { padding: 4px 6px 7px; max-height: 54vh; overflow-y: auto; }
+.sf-all { text-align: right; padding: 2px 4px 5px; font-size: .72rem; }
+.sf-all a { color: var(--accent); cursor: pointer; }
+.sf-row { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 7px; cursor: pointer; }
+.sf-row:hover { background: rgba(255,255,255,.06); }
+.sf-row.off { opacity: .45; }
+.sf-lab { flex: 1; line-height: 1.15; }
+.sf-ct { color: var(--dim); font-size: .68rem; min-width: 1.6em; text-align: right; }
+.sf-row input { accent-color: var(--accent); cursor: pointer; }
+.sf-ic { display: grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0;
+  font-size: 11px; font-weight: 700; color: #06121b; background: var(--c);
+  border: 2px solid rgba(255,255,255,.85); }
+.sf-circle, .sf-star, .sf-dots { border-radius: 50%; }
+.sf-square { border-radius: 5px; }
+.sf-dashed { border-style: dashed; }
+.sf-star { box-shadow: 0 0 6px var(--c); }
 
 /* regs table */
 table.regs { width: 100%; border-collapse: collapse; font-size: .8rem; }

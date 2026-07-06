@@ -12,7 +12,8 @@
     tab: "today",
     forecastPoint: null,   // {lat, lon, label}
     forecast: { marine: null, weather: null, tides: null, error: null },
-    spotSort: "score"
+    spotSort: "score",
+    spotFilters: loadSpotFilters()
   };
 
   const $ = sel => document.querySelector(sel);
@@ -139,7 +140,7 @@
     initDepthDetail();                         // computed sounding lattice + contours — ON by default
     seagrassGroup = L.layerGroup();            // FWC seagrass beds — auto-on with the Scallops chip
     hardbottomGroup = L.layerGroup();          // FWC West FL Shelf hard-bottom habitat — opt-in
-    structLayer = L.layerGroup();              // FWC reefs + NOAA wrecks (Tampa) — opt-in, ~1,100 dots
+    structLayer = L.layerGroup().addTo(map);   // FWC reefs + NOAA wrecks (Tampa); populated only when its filter is on
     spotRingLayer = L.layerGroup();            // rings around the last-clicked spot
 
     // NOAA BlueTopo — national best-available bathymetry (public domain).
@@ -159,12 +160,12 @@
     tripLayer = L.layerGroup().addTo(map);
     rigLayer = L.layerGroup().addTo(map);      // full BOEM platform field (Venice region)
 
-    // Plain-language layer list, most-used first. Oil platforms are added per
-    // region by switchRegion (they only exist off Venice).
+    // Base maps + data OVERLAYS here; individual SPOT types (wrecks, reefs,
+    // ledges, computed, crowd-sonar, my spots, the reef/wreck field, platforms)
+    // live in their own Spot-types legend/filter panel so each toggles on its own.
     layerCtl = L.control.layers(
       { "Ocean chart": L.layerGroup([ocean, oceanRef]), "Satellite": L.layerGroup([sat, satRef]), "Streets": osm },
-      { "Bite heatmap": heatLayer, "Spots": spotLayer, "Fishing areas": zoneLayer,
-        "Reefs & wrecks": structLayer,
+      { "Bite heatmap": heatLayer, "Fishing areas": zoneLayer,
         "Range rings": ringsGroup,
         "Depth soundings & contours": depthGroup,
         "Hard bottom (FWC)": hardbottomGroup,
@@ -174,8 +175,6 @@
         "My charts": chartGroup, "Full NOAA chart (ENC)": encGroup },
       { collapsed: true }
     ).addTo(map);
-    if (state.region === "venice") layerCtl.addOverlay(rigLayer, "Oil platforms");
-    else map.removeLayer(rigLayer);
 
     // Tiny legend so the heatmap colors mean something at a glance
     const heatLegend = el("div", "heatLegend", 'bite signal&nbsp; low <span class="hlbar"></span> high');
@@ -267,6 +266,47 @@
     return { wreck: "W", artificial_reef: "R", barge: "B", tower: "T", rubble: "R", ledge: "L", hard_bottom: "H", hole: "○", spring: "S", area_center: "A", user: "★", scallop_flat: "S", oil_rig: "O", lump: "H", deep_drop: "D", reef_light: "✦" }[t] || "•";
   }
   function allSpots() { return DATA_SPOTS.concat(window.USER_SPOTS || []); }
+
+  /* ---- spot categories: each a distinct icon + its own on/off filter ----
+     color is the primary identifier, reinforced by shape (square = man-made
+     reef, star = your spots) and a dashed ring (computed / crowd-sonar). */
+  const SPOT_CATS = [
+    { key: "wreck",    label: "Wrecks",                color: "#b06fe0", shape: "circle", glyph: "W" },
+    { key: "reef",     label: "Artificial reefs",      color: "#f4a259", shape: "square", glyph: "R" },
+    { key: "ledge",    label: "Ledges & hard bottom",  color: "#3ec6d0", shape: "circle", glyph: "L" },
+    { key: "spring",   label: "Springs & holes",       color: "#6db4ff", shape: "circle", glyph: "○" },
+    { key: "computed", label: "Computed structure",    color: "#9aa7b3", shape: "circle", glyph: "◇", dashed: true },
+    { key: "csb",      label: "Crowd-sonar (CSB)",     color: "#5ad17a", shape: "circle", glyph: "≈", dashed: true },
+    { key: "mine",     label: "My spots",              color: "#ffd166", shape: "star",   glyph: "★" },
+    { key: "field",    label: "Reef / wreck field",    color: "#c9a06a", shape: "dots",   glyph: "•" },
+    { key: "platform", label: "Oil platforms",         color: "#aab4c0", shape: "dots",   glyph: "■" }
+  ];
+  const CAT_BY_KEY = Object.fromEntries(SPOT_CATS.map(c => [c.key, c]));
+  function spotCategory(s) {
+    if (s.user) return "mine";
+    if (s.csb) return "csb";
+    if (s.computed) return "computed";
+    const t = s.type;
+    if (t === "wreck") return "wreck";
+    if (t === "ledge" || t === "hard_bottom") return "ledge";
+    if (t === "spring" || t === "hole") return "spring";
+    return "reef"; // artificial_reef, barge, tower, rubble, reef_light, misc man-made
+  }
+  function loadSpotFilters() {
+    const def = { wreck: true, reef: true, ledge: true, spring: true, computed: true, csb: true, mine: true, field: false, platform: true };
+    try { return Object.assign(def, JSON.parse(localStorage.getItem("GBI_SPOT_FILTERS") || "{}")); }
+    catch (e) { return def; }
+  }
+  function saveSpotFilters() { try { localStorage.setItem("GBI_SPOT_FILTERS", JSON.stringify(state.spotFilters)); } catch (e) { /* ignore */ } }
+  function catShown(key) { return state.spotFilters[key] !== false; }
+  function spotCounts() {
+    const c = { wreck: 0, reef: 0, ledge: 0, spring: 0, computed: 0, csb: 0, mine: 0, field: 0, platform: 0 };
+    for (const s of DATA_SPOTS) if (inRegion(s)) c[spotCategory(s)]++;
+    c.mine = (window.USER_SPOTS || []).length;
+    if (state.region === "tampa") c.field = (window.REEFS_TAMPA || []).length + (window.WRECKS_TAMPA || []).length;
+    if (state.region === "venice") c.platform = (window.RIGS_VENICE || []).length;
+    return c;
+  }
 
   /* ---- spot popups ---- */
   let pendingRingName = null; // name for the rings' anchor, set just before a popup opens
@@ -508,13 +548,16 @@
   let userCanvas = null;
   function drawSpots() {
     spotLayer.clearLayers();
-    // Public/research spots: rich divIcon pins (always a small set)
+    // Public/research spots: rich divIcon pins (always a small set), one icon
+    // style per category, each togglable via the Spot-types panel.
     for (const s of DATA_SPOTS) {
       if (!inRegion(s)) continue;
+      const cat = spotCategory(s);
+      if (!catShown(cat)) continue;
       const relevant = state.species === "all" || (s.species[state.species] || 0) > 0;
       const icon = L.divIcon({
         className: "",
-        html: '<div class="pin t-' + s.type + " g" + s.grade + (s.computed ? " computed" : "") + (relevant ? "" : " dim") + '">' + pinLetter(s.type) + "</div>",
+        html: '<div class="pin cat-' + cat + " g" + s.grade + (relevant ? "" : " dim") + '">' + pinLetter(s.type) + "</div>",
         iconSize: [22, 22], iconAnchor: [11, 11]
       });
       const m = L.marker([s.lat, s.lon], { icon });
@@ -524,7 +567,7 @@
       m.addTo(spotLayer);
     }
     // User spots: DOM pins when few, fast canvas dots when thousands
-    const us = window.USER_SPOTS || [];
+    const us = catShown("mine") ? (window.USER_SPOTS || []) : [];
     const heavy = us.length > 200;
     if (heavy && !userCanvas) userCanvas = L.canvas({ padding: 0.3, tolerance: 7 }); // forgiving hit-test on small dots
     for (const s of us) {
@@ -595,7 +638,7 @@
   function drawRigs() {
     if (!rigLayer) return;
     rigLayer.clearLayers();
-    if (state.region !== "venice" || !window.RIGS_VENICE) return;
+    if (state.region !== "venice" || !window.RIGS_VENICE || !catShown("platform")) return;
     if (!rigCanvas) rigCanvas = L.canvas({ padding: 0.3, tolerance: 6 });
     for (const r of RIGS_VENICE) {
       const la = r[0], lo = r[1], id = r[2], yr = r[3];
@@ -700,7 +743,7 @@
   function drawStructure() {
     if (!structLayer) return;
     structLayer.clearLayers();
-    if (state.region !== "tampa") return;
+    if (state.region !== "tampa" || !catShown("field")) return;
     if (!structCanvas) structCanvas = L.canvas({ padding: 0.3, tolerance: 6 });
     for (const r of (window.REEFS_TAMPA || [])) {
       const m = L.circleMarker([r.lat, r.lon], { renderer: structCanvas, radius: 3.4,
@@ -738,6 +781,58 @@
       "<button onclick=\"App.setForecastPoint(" + o.lat.toFixed(5) + "," + o.lon.toFixed(5) + ",'" + title + "')\">🌊 Forecast here</button>" +
       "<button onclick=\"App.addTripStop('" + title + "'," + o.lat.toFixed(6) + "," + o.lon.toFixed(6) + ')">➕ Add to trip</button></div>'
     ).openOn(map);
+  }
+
+  /* ---- Spot-types panel: legend + individual on/off filters ----
+     Doubles as the key (icon → meaning) and the control. Only lists categories
+     that actually have data in the current region. */
+  let spotFilterCtl, spotPanelCollapsed = window.innerWidth <= 860;
+  function buildSpotFilterPanel() {
+    if (!map) return;
+    if (spotFilterCtl) { map.removeControl(spotFilterCtl); spotFilterCtl = null; }
+    const counts = spotCounts();
+    const cats = SPOT_CATS.filter(c => counts[c.key] > 0);
+    const ctl = L.control({ position: "topright" });
+    ctl.onAdd = function () {
+      const wrap = el("div", "spotfilter" + (spotPanelCollapsed ? " collapsed" : ""));
+      const head = el("div", "sf-head",
+        '<span>🎯 Spot types</span><span class="sf-caret">▾</span>');
+      head.onclick = () => { spotPanelCollapsed = !spotPanelCollapsed; wrap.classList.toggle("collapsed", spotPanelCollapsed); };
+      wrap.append(head);
+      const body = el("div", "sf-body");
+      // all on / off shortcut
+      const allRow = el("div", "sf-all");
+      allRow.innerHTML = '<a data-a="on">All on</a> · <a data-a="off">All off</a>';
+      allRow.querySelectorAll("a").forEach(a => a.onclick = e => {
+        e.stopPropagation();
+        const v = a.dataset.a === "on";
+        cats.forEach(c => state.spotFilters[c.key] = v);
+        saveSpotFilters(); buildSpotFilterPanel(); drawSpots(); drawStructure(); drawRigs();
+      });
+      body.append(allRow);
+      for (const c of cats) {
+        const on = catShown(c.key);
+        const row = el("label", "sf-row" + (on ? "" : " off"));
+        row.innerHTML =
+          '<span class="sf-ic sf-' + c.shape + (c.dashed ? " sf-dashed" : "") + '" style="--c:' + c.color + '">' + c.glyph + "</span>" +
+          '<span class="sf-lab">' + c.label + "</span>" +
+          '<span class="sf-ct">' + counts[c.key] + "</span>" +
+          '<input type="checkbox"' + (on ? " checked" : "") + ">";
+        const cb = row.querySelector("input");
+        cb.onchange = () => {
+          state.spotFilters[c.key] = cb.checked; saveSpotFilters();
+          row.classList.toggle("off", !cb.checked);
+          drawSpots(); drawStructure(); drawRigs();
+        };
+        body.append(row);
+      }
+      wrap.append(body);
+      L.DomEvent.disableClickPropagation(wrap);
+      L.DomEvent.disableScrollPropagation(wrap);
+      return wrap;
+    };
+    ctl.addTo(map);
+    spotFilterCtl = ctl;
   }
 
   function refreshHeat() {
@@ -1409,7 +1504,7 @@
   }
 
   function refreshAll() {
-    drawRings(); drawSpots(); drawZones(); drawRigs(); drawStructure(); refreshHeat(); Trip.plot(); renderTab();
+    drawRings(); drawSpots(); drawZones(); drawRigs(); drawStructure(); refreshHeat(); Trip.plot(); buildSpotFilterPanel(); renderTab();
   }
 
   let toastTimer;
@@ -1490,12 +1585,6 @@
     alignCache = { key: "", rows: null };
     populateLaunches();
     buildChips();
-    // Oil platforms only exist off Venice — keep the layer list clean elsewhere
-    if (layerCtl) {
-      layerCtl.removeLayer(rigLayer);
-      if (id === "venice") { layerCtl.addOverlay(rigLayer, "Oil platforms"); if (!map.hasLayer(rigLayer)) map.addLayer(rigLayer); }
-      else if (map.hasLayer(rigLayer)) map.removeLayer(rigLayer);
-    }
     const R = regionObj();
     map.setView(R.center, R.zoom);
     refreshAll();
