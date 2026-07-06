@@ -48,7 +48,63 @@
   }
 
   /* ================= map ================= */
-  let map, heatLayer, spotLayer, zoneLayer, ringLayer, fpMarker, chartGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas;
+  let map, heatLayer, spotLayer, zoneLayer, ringLayer, fpMarker, chartGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas, depthGroup, depthLabels;
+
+  // Computed depth detail — the 10,353-point sounding lattice + marching-squares
+  // contours harvested from NOAA's DEM into data/depth_tampa.js. Pure vectors, so
+  // unlike the ENC chart layers there is no scale gating: contours draw at every
+  // zoom, and depth numbers/labels redraw per viewport (decimated to stay legible).
+  function initDepthDetail() {
+    depthLabels = L.layerGroup();
+    depthGroup = L.layerGroup([depthLabels]).addTo(map);
+    if (!window.CONTOURS_TAMPA) return;
+    const maj = ft => ft % 60 === 0; // emphasize 60/120/180 — 120 ft is the Feb–Mar SWG closure line
+    CONTOURS_TAMPA.forEach(c => c.paths.forEach(path =>
+      depthGroup.addLayer(L.polyline(path, {
+        color: maj(c.ft) ? "#7fe3f0" : "#3fa7b8", weight: maj(c.ft) ? 1.9 : 1.1,
+        opacity: maj(c.ft) ? 0.85 : 0.62, interactive: false, smoothFactor: 1.25
+      }))));
+  }
+
+  function depthRefresh() {
+    if (!map || !depthGroup || !map.hasLayer(depthGroup) || !window.DEPTH_TAMPA) return;
+    depthLabels.clearLayers();
+    const z = map.getZoom();
+    if (z < 8) return; // regional overview: contours only, no number clutter
+    const b = map.getBounds().pad(0.02);
+    const S = b.getSouth(), N = b.getNorth(), W = b.getWest(), E = b.getEast();
+    const lab = (lat, lon, cls, txt) => depthLabels.addLayer(L.marker([lat, lon], {
+      interactive: false, keyboard: false,
+      icon: L.divIcon({ className: cls, html: "<span>" + txt + "</span>", iconSize: null })
+    }));
+    // sounding numbers — pick a decimation so ~350 fit the current viewport
+    const g = DEPTH_TAMPA;
+    const rowsIn = Math.max(1, Math.ceil((N - S) / g.step));
+    const colsIn = Math.max(1, Math.ceil((E - W) / g.step));
+    let every = 1;
+    while (Math.ceil(rowsIn / every) * Math.ceil(colsIn / every) > 350) every++;
+    let n = 0;
+    for (let r = 0; r < g.rows && n < 500; r += every)
+      for (let c = 0; c < g.cols && n < 500; c += every) {
+        const d = g.d[r * g.cols + c];
+        if (d < 6) continue;
+        const lat = g.lat0 + r * g.step, lon = g.lon0 + c * g.step;
+        if (lat < S || lat > N || lon < W || lon > E) continue;
+        lab(lat, lon, "snd", d);
+        n++;
+      }
+    // contour depth labels at path midpoints
+    if (window.CONTOURS_TAMPA) {
+      let m = 0;
+      CONTOURS_TAMPA.forEach(c => c.paths.forEach(path => {
+        if (m >= 70 || path.length < 4) return;
+        const mid = path[Math.floor(path.length / 2)];
+        if (mid[0] < S || mid[0] > N || mid[1] < W || mid[1] > E) return;
+        lab(mid[0], mid[1], "clab" + (c.ft % 60 === 0 ? " maj" : ""), c.ft);
+        m++;
+      }));
+    }
+  }
 
   function initMap() {
     const R0 = regionObj();
@@ -78,7 +134,8 @@
     map.createPane("zones").style.zIndex = 450;
     chartGroup = L.layerGroup().addTo(map);   // user-imported chart overlays (under vectors/pins)
     encGroup = L.layerGroup();                 // live NOAA ENC full chart (opt-in via layer control)
-    contourGroup = L.layerGroup().addTo(map);  // depth contour lines + soundings — ON by default
+    contourGroup = L.layerGroup().addTo(map);  // ENC depth contour lines + soundings — ON by default
+    initDepthDetail();                         // computed sounding lattice + contours — ON by default
     seagrassGroup = L.layerGroup();            // FWC seagrass beds — auto-on with the Scallops chip
     spotRingLayer = L.layerGroup().addTo(map); // range rings around the last-clicked spot
 
@@ -102,20 +159,22 @@
       { "Ocean chart": L.layerGroup([ocean, oceanRef]), "Satellite": L.layerGroup([sat, satRef]), "Streets": osm },
       { "Heatmap": heatLayer, "Spots": spotLayer, "Areas": zoneLayer, "Launch range rings": ringLayer,
         "Spot range rings": spotRingLayer, "Oil platforms (BOEM)": rigLayer,
-        "Depth contours": contourGroup, "Depth model (BlueTopo)": bathyGroup,
+        "Depth contours (chart)": contourGroup, "Soundings + contours (computed)": depthGroup,
+        "Depth model (BlueTopo)": bathyGroup,
         "Seagrass beds (FWC)": seagrassGroup,
         "My charts": chartGroup, "NOAA ENC chart (full)": encGroup },
       { collapsed: true }
     ).addTo(map);
 
     // NOAA ENC services are dynamic exports — re-render on pan/zoom while enabled
-    map.on("moveend", () => { Charts.encRefresh(map, encGroup); Charts.contoursRefresh(map, contourGroup); Charts.seagrassRefresh(map, seagrassGroup); });
+    map.on("moveend", () => { Charts.encRefresh(map, encGroup); Charts.contoursRefresh(map, contourGroup); Charts.seagrassRefresh(map, seagrassGroup); depthRefresh(); });
     map.on("overlayadd", e => {
       if (e.layer === encGroup) Charts.encRefresh(map, encGroup);
       if (e.layer === contourGroup) Charts.contoursRefresh(map, contourGroup);
       if (e.layer === seagrassGroup) Charts.seagrassRefresh(map, seagrassGroup);
+      if (e.layer === depthGroup) depthRefresh();
     });
-    map.whenReady(() => setTimeout(() => Charts.contoursRefresh(map, contourGroup), 400));
+    map.whenReady(() => setTimeout(() => { Charts.contoursRefresh(map, contourGroup); depthRefresh(); }, 400));
 
     map.on("baselayerchange", e => { /* keep ref labels with ocean */ });
 

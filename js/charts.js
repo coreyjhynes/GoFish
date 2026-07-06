@@ -214,19 +214,22 @@
   }
 
   // Depth contour lines + soundings only (ENC sublayers), inverted to white via CSS.
-  // 2x render size halves the map scale so the contour group draws even zoomed out,
-  // and doubles as retina sharpening.
+  // Oversampled render (up to 3x, capped at the service's 4096px limit) shrinks the
+  // effective map scale so scale-gated soundings draw ~1.5 zoom levels earlier,
+  // and doubles as retina sharpening. Zoom ladder walks to finer ENC bands:
+  // general offshore -> coastal -> approach charts inshore (densest soundings).
   function contoursRefresh(map, group) {
     if (!map.hasLayer(group)) return;
-    const coastal = map.getZoom() >= 11;
-    const service = coastal ? "enc_coastal" : "enc_general";
-    const show = coastal ? "80,60" : "63,49"; // DepthsL group, SoundingsP group
+    const z = map.getZoom();
+    const service = z >= 13 ? "enc_approach" : z >= 11 ? "enc_coastal" : "enc_general";
+    const show = z >= 13 ? "106,79" : z >= 11 ? "80,60" : "63,49"; // DepthsL group, SoundingsP group
     const b = map.getBounds();
     const sw = L.CRS.EPSG3857.project(b.getSouthWest());
     const ne = L.CRS.EPSG3857.project(b.getNorthEast());
     const size = map.getSize();
+    const k = Math.min(3, 4096 / Math.max(size.x, size.y));
     const url = ENC_BASE + service + "/MapServer/export?bbox=" + [sw.x, sw.y, ne.x, ne.y].join(",") +
-      "&bboxSR=3857&imageSR=3857&size=" + (size.x * 2) + "," + (size.y * 2) +
+      "&bboxSR=3857&imageSR=3857&size=" + Math.round(size.x * k) + "," + Math.round(size.y * k) +
       "&format=png32&transparent=true&dpi=96&layers=show:" + show + "&f=image";
     const ov = L.imageOverlay(url, b, { opacity: 0.85, interactive: false, className: "enc-invert" });
     ov.once("load", () => {
