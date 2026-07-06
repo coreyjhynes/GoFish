@@ -180,5 +180,31 @@ window.DATA_SPOTS = [
     species: { gag_grouper: 3, mangrove_snapper: 3 },
     notes: "Nearshore submarine spring off Aripeka dropping to ~209 ft with a hard thermocline — stacks bait and fish in cold snaps. Novelty structure, not an offshore run.",
     sources: [{ name: "ScubaBoard thread", url: "https://scubaboard.com/community/threads/off-shore-spring-south-of-hudson.306960/" }]
+  },
+
+  /* ---------- STORIED OFFSHORE SPRINGS (long runs, southern reach) ---------- */
+  {
+    id: "green_banana", name: "Green Banana Hole (blue hole)", lat: 26.80119, lon: -83.08198,
+    depth_ft: [154, 425], relief_ft: 0, type: "spring", grade: "B",
+    species: { red_snapper: 4, amberjack: 4, mangrove_snapper: 4, gag_grouper: 3, red_grouper: 3 },
+    notes: "THE famous one — an hourglass blue hole: rim at 154 ft opening to ~425 ft, named when a commercial captain spotted a green banana peel floating over it. NOAA/Mote/FAU explored it 2020–21; the position is from their published record. Springs concentrate bait, AJs and stacked snapper/grouper, especially in cold snaps. Reality check on the lore: it sits ~62 mi SSW of the Tampa Bay mouth (~50 mi W of Sarasota) — south of 'due west of St. Pete.' A serious run — pick a flat day and expect the hourglass to narrow just under the rim.",
+    sources: [
+      { name: "Wikipedia — Green Banana Hole (position)", url: "https://en.wikipedia.org/wiki/Green_Banana_Hole" },
+      { name: "Florida Sportsman offshore springs feature", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }
+    ]
+  },
+  {
+    id: "top_cap_spring", name: "Top Cap (spring)", lat: 27.19555, lon: -83.56667,
+    depth_ft: [162, 162], relief_ft: 0, type: "spring", grade: "B",
+    species: { red_snapper: 4, red_grouper: 4, amberjack: 3, mangrove_snapper: 3, vermilion_snapper: 3 },
+    notes: "Published-GPS offshore spring from the Florida Sportsman springs feature (27°11.733' / 83°34.000'), 162 ft — southwest reach of the grounds, ~55 mi from the Tampa Bay mouth. Spring vents hold bait and stack winter fish.",
+    sources: [{ name: "Florida Sportsman offshore springs feature", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
+  },
+  {
+    id: "deep_undercover_spring", name: "Deep Undercover (spring)", lat: 27.13708, lon: -83.43985,
+    depth_ft: [160, 160], relief_ft: 0, type: "spring", grade: "B",
+    species: { red_snapper: 4, red_grouper: 4, amberjack: 3, mangrove_snapper: 3, vermilion_snapper: 3 },
+    notes: "Second published-GPS spring from the same feature (27°08.225' / 83°26.391'), 160 ft — a natural pair with Top Cap ~8 mi apart on the southern grounds.",
+    sources: [{ name: "Florida Sportsman offshore springs feature", url: "https://www.floridasportsman.com/editorial/features_0901_fishing_gulf_of_mexico_offshore_springs/401487" }]
   }
 ];
