@@ -367,6 +367,7 @@
   function spotCategory(s) {
     if (s.user) return "mine";
     if (s.loiter) return "loiter";
+    if (s.springish) return "spring";   // computed deep holes flagged as probable springs group with real springs
     if (s.csb) return "csb";
     if (s.computed) return "computed";
     const t = s.type;
@@ -762,18 +763,23 @@
 
     const add = (f, kind, i, focus) => {
       if (focus && near(f.lat, f.lon)) return;
-      const type = kind === "ledge" ? "ledge" : kind === "hole" ? "hole" : "hard_bottom";
-      const top = f.relief >= 30 ? 4 : f.relief >= 18 ? 3 : 2;
-      const kn = kind === "ledge" ? "Ledge" : kind === "hole" ? "Hole" : "Hard-bottom rise";
-      const name = kn + " " + f.depth + " ft" + (f.relief >= 6 ? " · " + Math.round(f.relief) + " ft relief" : "");
-      const how = kind === "hole" ? "a depression ~" + Math.round(Math.abs(f.resid)) + " ft below the surrounding bottom"
+      // A deep, isolated, steep-rimmed hole = the bathymetric signature of a WFL
+      // submarine spring/sinkhole. Flag the strongest holes as probable springs.
+      const springish = kind === "hole" && Math.abs(f.resid) >= 12 && f.depth >= 45 && f.depth <= 280;
+      const type = springish ? "spring" : (kind === "ledge" ? "ledge" : kind === "hole" ? "hole" : "hard_bottom");
+      const top = springish ? 3 : (f.relief >= 30 ? 4 : f.relief >= 18 ? 3 : 2);
+      const kn = springish ? "Possible spring" : (kind === "ledge" ? "Ledge" : kind === "hole" ? "Hole" : "Hard-bottom rise");
+      const name = kn + " " + f.depth + " ft" + (!springish && f.relief >= 6 ? " · " + Math.round(f.relief) + " ft relief" : "");
+      const how = springish ? "an isolated deep hole ~" + Math.round(Math.abs(f.resid)) + " ft below the surrounding bottom — the shape of a submarine spring/sinkhole"
+                : kind === "hole" ? "a depression ~" + Math.round(Math.abs(f.resid)) + " ft below the surrounding bottom"
                 : kind === "ledge" ? "a steep drop-off (~" + f.slope + " ft/mi) with " + Math.round(f.relief) + " ft of relief"
                 : "hard bottom standing ~" + Math.round(Math.abs(f.resid)) + " ft above the surrounding sand";
       DATA_SPOTS.push({
         id: (focus ? "fdem_" : "cmp_") + kind + i, name, lat: f.lat, lon: f.lon, depth_ft: f.depth,
-        relief_ft: Math.round(f.relief), type, grade: f.grade, region: "tampa", computed: true,
+        relief_ft: Math.round(f.relief), type, grade: f.grade, region: "tampa", computed: true, springish: springish || undefined,
         species: speciesForDepth(f.depth, kind, top),
         notes: "Computed from NOAA DEM terrain analysis — " + how + "." +
+          (springish ? " Flagged a probable spring by its shape (deep, isolated). Deep springs don't show on satellite surface temperature, so confirm on your sounder — watch for a thermocline or color change." : "") +
           (focus ? " High-detail pass over the 40–60 mi band N of the pipeline." : "") +
           " Not a charted or verified spot: idle over it on your sounder to confirm before you fish it."
       });
@@ -787,16 +793,21 @@
       if (focus && near(f.lat, f.lon)) return;
       const crowd = Math.round(f.depth - f.anom);
       const diff = Math.abs(Math.round(f.anom));
-      const type = f.kind === "rise" ? "hard_bottom" : "hole";
+      // an uncharted deep hole the crowd found = strong spring candidate
+      const springish = f.kind === "hole" && diff >= 14 && crowd >= 45 && crowd <= 300;
+      const type = springish ? "spring" : (f.kind === "rise" ? "hard_bottom" : "hole");
       const top = diff >= 25 ? 4 : diff >= 16 ? 3 : 2;
       DATA_SPOTS.push({
-        id: (focus ? "fcsb_" : "csb_") + i, name: (f.kind === "rise" ? "Crowd-sonar rise " : "Crowd-sonar hole ") + crowd + " ft",
-        lat: f.lat, lon: f.lon, depth_ft: crowd, type, grade: f.grade, region: "tampa", computed: true, csb: true,
+        id: (focus ? "fcsb_" : "csb_") + i,
+        name: springish ? "Possible spring " + crowd + " ft" : ((f.kind === "rise" ? "Crowd-sonar rise " : "Crowd-sonar hole ") + crowd + " ft"),
+        lat: f.lat, lon: f.lon, depth_ft: crowd, type, grade: f.grade, region: "tampa", computed: true, csb: true, springish: springish || undefined,
         species: speciesForDepth(crowd, f.kind, top),
-        notes: f.tracks + " independent crowd-sonar tracks read " + diff + " ft " +
-          (f.kind === "rise" ? "shallower" : "deeper") + " than the depth model here — likely uncharted " +
-          (f.kind === "rise" ? "hard bottom or structure" : "hole/depression") +
-          ". Crowdsourced (NOAA DCDB); idle over it on your sounder to confirm."
+        notes: springish
+          ? f.tracks + " crowd-sonar tracks read this " + diff + " ft deeper than the chart — an uncharted deep hole with the shape of a submarine spring/sinkhole. Deep springs don't show on satellite surface temperature; confirm on your sounder. (NOAA DCDB.)"
+          : f.tracks + " independent crowd-sonar tracks read " + diff + " ft " +
+            (f.kind === "rise" ? "shallower" : "deeper") + " than the depth model here — likely uncharted " +
+            (f.kind === "rise" ? "hard bottom or structure" : "hole/depression") +
+            ". Crowdsourced (NOAA DCDB); idle over it on your sounder to confirm."
       });
       pushed.push({ lat: f.lat, lon: f.lon });
     };
