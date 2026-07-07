@@ -1,0 +1,5 @@
+/* AIS fleet-activity loiter spots — 40-60 mi W of Tampa Bay -> Tarpon. Slow-speed
+   (<=3 kn) fishing/pleasure vessels from NOAA Marine Cadastre AIS (16 sampled 2024
+   days), clustered where multiple independent boats held station across days.
+   The working fleet fishes here — verify on your sounder. 2026-07-07. */
+window.AIS_LOITER_TAMPA = [{"lat":28.026,"lon":-83.602,"depth":108,"vessels":2,"days":3,"pts":50,"grade":"B"},{"lat":27.73,"lon":-83.638,"depth":138,"vessels":1,"days":2,"pts":116,"grade":"C"},{"lat":28.03,"lon":-83.666,"depth":108,"vessels":2,"days":2,"pts":14,"grade":"B"},{"lat":28.15,"lon":-83.81,"depth":115,"vessels":1,"days":2,"pts":25,"grade":"C"},{"lat":27.758,"lon":-83.55,"depth":115,"vessels":1,"days":1,"pts":35,"grade":"C"},{"lat":27.858,"lon":-83.818,"depth":138,"vessels":1,"days":1,"pts":21,"grade":"C"},{"lat":28.218,"lon":-83.574,"depth":98,"vessels":1,"days":1,"pts":19,"grade":"C"},{"lat":28.094,"lon":-83.514,"depth":96,"vessels":1,"days":1,"pts":16,"grade":"C"}];

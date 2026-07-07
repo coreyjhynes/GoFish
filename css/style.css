@@ -220,6 +220,7 @@ a:hover { text-decoration: underline; }
 .pin.cat-spring   { background: #6db4ff; }
 .pin.cat-computed { background: #9aa7b3; border-style: dashed; }
 .pin.cat-csb      { background: #5ad17a; border-style: dashed; }
+.pin.cat-loiter   { background: #ff7a59; color: #2a0f06; }
 .pin.cat-mine     { background: #ffd166; box-shadow: 0 0 7px rgba(255,209,102,.85), 0 1px 5px rgba(0,0,0,.6); }
 .pin.gC { opacity: .85; border-style: dashed; }
 .pin.dim { opacity: .28; }

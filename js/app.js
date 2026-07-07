@@ -256,14 +256,14 @@
 
   function typeLabel(t) {
     return { wreck: "Wreck", artificial_reef: "Artificial reef", barge: "Barge", tower: "Tower", rubble: "Rubble",
-      ledge: "Ledge", hard_bottom: "Hard-bottom rise", hole: "Hole / sinkhole", spring: "Spring", area_center: "Area", lump: "Lump",
+      ledge: "Ledge", hard_bottom: "Hard-bottom rise", hole: "Hole / sinkhole", spring: "Spring", fleet: "Fleet loiter spot", area_center: "Area", lump: "Lump",
       ledge_belt: "Ledge belt", natural_area: "Natural area", hapc: "Protected area (HAPC)", user: "My spot",
       no_take: "NO-TAKE reserve", scallop_zone: "Scallop harvest zone", scallop_flat: "Scallop flat",
       oil_rig: "Oil rig / floater", lump: "Hump / lump", deep_drop: "Deep-drop grounds", reef_light: "Reef light",
       troll_corridor: "Trolling corridor" }[t] || t;
   }
   function pinLetter(t) {
-    return { wreck: "W", artificial_reef: "R", barge: "B", tower: "T", rubble: "R", ledge: "L", hard_bottom: "H", hole: "○", spring: "S", area_center: "A", user: "★", scallop_flat: "S", oil_rig: "O", lump: "H", deep_drop: "D", reef_light: "✦" }[t] || "•";
+    return { wreck: "W", artificial_reef: "R", barge: "B", tower: "T", rubble: "R", ledge: "L", hard_bottom: "H", hole: "○", spring: "S", area_center: "A", user: "★", scallop_flat: "S", oil_rig: "O", lump: "H", deep_drop: "D", reef_light: "✦", fleet: "⚓" }[t] || "•";
   }
   function allSpots() { return DATA_SPOTS.concat(window.USER_SPOTS || []); }
 
@@ -277,6 +277,7 @@
     { key: "spring",   label: "Springs & holes",       color: "#6db4ff", shape: "circle", glyph: "○" },
     { key: "computed", label: "Computed structure",    color: "#9aa7b3", shape: "circle", glyph: "◇", dashed: true },
     { key: "csb",      label: "Crowd-sonar (CSB)",     color: "#5ad17a", shape: "circle", glyph: "≈", dashed: true },
+    { key: "loiter",   label: "Fleet activity (AIS)",  color: "#ff7a59", shape: "circle", glyph: "⚓" },
     { key: "mine",     label: "My spots",              color: "#ffd166", shape: "star",   glyph: "★" },
     { key: "field",    label: "Reef / wreck field",    color: "#c9a06a", shape: "dots",   glyph: "•" },
     { key: "platform", label: "Oil platforms",         color: "#aab4c0", shape: "dots",   glyph: "■" }
@@ -284,6 +285,7 @@
   const CAT_BY_KEY = Object.fromEntries(SPOT_CATS.map(c => [c.key, c]));
   function spotCategory(s) {
     if (s.user) return "mine";
+    if (s.loiter) return "loiter";
     if (s.csb) return "csb";
     if (s.computed) return "computed";
     const t = s.type;
@@ -300,7 +302,7 @@
   function saveSpotFilters() { try { localStorage.setItem("GBI_SPOT_FILTERS", JSON.stringify(state.spotFilters)); } catch (e) { /* ignore */ } }
   function catShown(key) { return state.spotFilters[key] !== false; }
   function spotCounts() {
-    const c = { wreck: 0, reef: 0, ledge: 0, spring: 0, computed: 0, csb: 0, mine: 0, field: 0, platform: 0 };
+    const c = { wreck: 0, reef: 0, ledge: 0, spring: 0, computed: 0, csb: 0, loiter: 0, mine: 0, field: 0, platform: 0 };
     for (const s of DATA_SPOTS) if (inRegion(s)) c[spotCategory(s)]++;
     c.mine = (window.USER_SPOTS || []).length;
     if (state.region === "tampa") c.field = (window.REEFS_TAMPA || []).length + (window.WRECKS_TAMPA || []).length;
@@ -734,6 +736,23 @@
       (F.holes || []).forEach((f, i) => add(f, "hole", 900 + i, true));
     }
     (window.FOCUS_CSB_TAMPA || []).forEach((f, i) => addCSB(f, 900 + i, true));
+
+    // AIS fleet-activity loiter spots: where slow-speed fishing/charter vessels held
+    // station. A behavioral signal (boats actually fish here), independent of the
+    // bathymetry — so NOT deduped; a loiter pin on top of a reef is corroboration.
+    (window.AIS_LOITER_TAMPA || []).forEach((f, i) => {
+      const d = f.depth || 90;
+      const top = f.vessels >= 3 ? 4 : f.vessels >= 2 ? 3 : 2;
+      DATA_SPOTS.push({
+        id: "ais_" + i, name: "Fleet spot" + (f.depth ? " " + f.depth + " ft" : "") + " · " + f.vessels + (f.vessels === 1 ? " boat" : " boats"),
+        lat: f.lat, lon: f.lon, depth_ft: d, type: "fleet", grade: f.grade, region: "tampa", loiter: true,
+        species: speciesForDepth(d, "rise", top),
+        notes: (f.vessels >= 2
+          ? f.vessels + " independent AIS fishing/charter vessels held station here across " + f.days + " different days"
+          : "An AIS fishing/charter vessel held station here (" + f.pts + " slow-speed fixes over " + f.days + " day" + (f.days === 1 ? "" : "s") + ")") +
+          " — the working fleet fishes this spot. From NOAA Marine Cadastre AIS; verify on your sounder."
+      });
+    });
   }
 
   /* ---- known structure field: FWC artificial reefs + NOAA ENC wrecks (Tampa) ----
