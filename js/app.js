@@ -50,6 +50,7 @@
 
   /* ================= map ================= */
   let map, heatLayer, spotLayer, zoneLayer, ringLayer, ringsGroup, fpMarker, chartGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas, depthGroup, depthLabels, layerCtl, structLayer, structCanvas, hardbottomGroup;
+  let rulerMode = false, rulerPts = [], rulerLayer, rulerRubber, rulerTip;
 
   // Computed depth detail — the 10,353-point sounding lattice + marching-squares
   // contours harvested from NOAA's DEM into data/depth_tampa.js. Pure vectors, so
@@ -231,16 +232,22 @@
     // Scale ruler (statute miles / feet), updates with zoom
     L.control.scale({ metric: false, imperial: true, maxWidth: 150, position: "bottomleft" }).addTo(map);
 
-    // Right-click: zone info if inside one, else dropped pin with coords + rings
+    // Ruler measurements live in their own top pane so they stay visible
+    map.createPane("ruler").style.zIndex = 640;
+    rulerLayer = L.layerGroup().addTo(map);
+
+    // Right-click: in ruler mode undo the last point; else zone info / dropped pin
     map.on("contextmenu", e => {
+      if (rulerMode) { L.DomEvent.preventDefault(e); rulerPts.pop(); drawRuler(); return; }
       const z = zoneAt(e.latlng);
       if (z) openTargetPopup(z, true, e.latlng);
       else droppedPinPopup(e.latlng);
     });
 
-    // Forgiving left-click: snap to the nearest spot within 14 px of the click.
-    // (Direct hits on markers/dots stop propagation and never reach this.)
+    // Left-click: in ruler mode drop a measurement point (snapped to a nearby spot);
+    // else forgiving snap to the nearest spot within 14 px.
     map.on("click", e => {
+      if (rulerMode) { addRulerPoint(e.latlng); return; }
       const p = map.latLngToContainerPoint(e.latlng);
       let best = null, bestD = 14;
       for (const s of allSpots()) {
@@ -250,8 +257,82 @@
       }
       if (best) openTargetPopup(best, false, L.latLng(best.lat, best.lon));
     });
+    map.on("mousemove", e => { if (rulerMode) updateRulerRubber(e.latlng); });
 
     addSearchControl();
+  }
+
+  /* ---- ruler: tap points to measure distance + bearing, with a running total
+     and an ETA at your boat's cruise speed (from the Trip planner) ---- */
+  function bearingDeg(a, b) {
+    const y1 = a.lat * Math.PI / 180, y2 = b.lat * Math.PI / 180, dx = (b.lng - a.lng) * Math.PI / 180;
+    const y = Math.sin(dx) * Math.cos(y2);
+    const x = Math.cos(y1) * Math.sin(y2) - Math.sin(y1) * Math.cos(y2) * Math.cos(dx);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+  function boatEta(mi) {
+    try {
+      const mph = (JSON.parse(localStorage.getItem("GBI_BOAT") || "{}")).cruiseMph;
+      if (mph > 0) { const min = mi / mph * 60; return min >= 60 ? (min / 60).toFixed(1) + " h" : Math.round(min) + " min"; }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+  function toggleRuler() {
+    rulerMode = !rulerMode;
+    const btn = $("#rulerBtn");
+    if (btn) btn.classList.toggle("on", rulerMode);
+    if (map) map.getContainer().style.cursor = rulerMode ? "crosshair" : "";
+    if (rulerMode) toast("📏 Ruler on — tap points to measure. Right-click undoes the last, Esc or 📏 finishes.");
+    else clearRuler();
+  }
+  function clearRuler() { rulerPts = []; rulerRubber = rulerTip = null; if (rulerLayer) rulerLayer.clearLayers(); }
+  function addRulerPoint(latlng) {
+    const p = map.latLngToContainerPoint(latlng);
+    let best = null, bestD = 16;                 // snap to a nearby spot for precise leg measuring
+    for (const s of allSpots()) {
+      const sp = map.latLngToContainerPoint([s.lat, s.lon]);
+      const d = Math.hypot(sp.x - p.x, sp.y - p.y);
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    rulerPts.push(best ? L.latLng(best.lat, best.lon) : latlng);
+    drawRuler();
+  }
+  function rulerIcon(cls, html) { return L.divIcon({ className: cls, html: html, iconSize: null }); }
+  function fmtRulerMi(d) { return (d < 10 ? d.toFixed(2) : d.toFixed(1)) + " mi"; }
+  function drawRuler() {
+    if (!rulerLayer) return;
+    rulerLayer.clearLayers(); rulerRubber = rulerTip = null;
+    if (!rulerPts.length) return;
+    if (rulerPts.length >= 2)
+      L.polyline(rulerPts, { pane: "ruler", color: "#ffd166", weight: 2.5, opacity: 0.95, dashArray: "7 5", interactive: false }).addTo(rulerLayer);
+    let total = 0;
+    rulerPts.forEach((pt, i) => {
+      L.circleMarker(pt, { pane: "ruler", radius: 4, color: "#ffd166", weight: 2, fillColor: "#12210c", fillOpacity: 1, interactive: false }).addTo(rulerLayer);
+      if (i > 0) {
+        const a = rulerPts[i - 1];
+        const seg = Scoring.haversineMi(a.lat, a.lng, pt.lat, pt.lng);
+        total += seg;
+        const mid = L.latLng((a.lat + pt.lat) / 2, (a.lng + pt.lng) / 2);
+        L.marker(mid, { pane: "ruler", interactive: false, keyboard: false,
+          icon: rulerIcon("ruler-lab", fmtRulerMi(seg) + " · " + Math.round(bearingDeg(a, pt)) + "°") }).addTo(rulerLayer);
+      }
+    });
+    if (rulerPts.length >= 2) {
+      const eta = boatEta(total);
+      L.marker(rulerPts[rulerPts.length - 1], { pane: "ruler", interactive: false, keyboard: false,
+        icon: rulerIcon("ruler-total", "Σ " + total.toFixed(1) + " mi" + (eta ? " · ~" + eta : "")) }).addTo(rulerLayer);
+    }
+  }
+  function updateRulerRubber(latlng) {
+    if (!rulerLayer) return;
+    if (rulerRubber) { rulerLayer.removeLayer(rulerRubber); rulerRubber = null; }
+    if (rulerTip) { rulerLayer.removeLayer(rulerTip); rulerTip = null; }
+    if (!rulerMode || !rulerPts.length) return;
+    const last = rulerPts[rulerPts.length - 1];
+    rulerRubber = L.polyline([last, latlng], { pane: "ruler", color: "#ffd166", weight: 1.5, opacity: 0.55, dashArray: "3 6", interactive: false }).addTo(rulerLayer);
+    const seg = Scoring.haversineMi(last.lat, last.lng, latlng.lat, latlng.lng);
+    rulerTip = L.marker(latlng, { pane: "ruler", interactive: false, keyboard: false,
+      icon: rulerIcon("ruler-tip", fmtRulerMi(seg) + " · " + Math.round(bearingDeg(last, latlng)) + "°") }).addTo(rulerLayer);
   }
 
   function typeLabel(t) {
@@ -1839,7 +1920,11 @@
     stage("forecast", () => loadForecast());
     stage("charts", () => Charts.render(chartGroup).then(recs => { if (recs.length && state.tab === "spots") renderTab(); }));
     stage("mobile", () => initMobileUI());
-    stage("locate", () => { const b = $("#locateBtn"); if (b) b.onclick = toggleLocate; });
+    stage("locate", () => {
+      const b = $("#locateBtn"); if (b) b.onclick = toggleLocate;
+      const r = $("#rulerBtn"); if (r) r.onclick = toggleRuler;
+      document.addEventListener("keydown", e => { if (e.key === "Escape" && rulerMode) toggleRuler(); });
+    });
     App.map = map; App.chartGroup = chartGroup; App.encGroup = encGroup;
   }
 
