@@ -10,10 +10,11 @@
     const wpts = spots.map(s => {
       const depth = s.depth_ft != null ? (Array.isArray(s.depth_ft) ? s.depth_ft.join("-") : s.depth_ft) + " ft" : "";
       const desc = [s.type, depth, s.notes].filter(Boolean).join(" | ");
+      const sym = s.sym || (s.type === "wreck" ? "Shipwreck" : s.type === "user" ? "Flag" : "Reef");
       return '  <wpt lat="' + s.lat.toFixed(6) + '" lon="' + s.lon.toFixed(6) + '">\n' +
         "    <name>" + esc(s.name) + "</name>\n" +
         "    <desc>" + esc(desc) + "</desc>\n" +
-        "    <sym>" + (s.type === "wreck" ? "Shipwreck" : s.type === "user" ? "Flag" : "Reef") + "</sym>\n" +
+        "    <sym>" + esc(sym) + "</sym>\n" +
         "  </wpt>";
     }).join("\n");
     return '<?xml version="1.0" encoding="UTF-8"?>\n' +

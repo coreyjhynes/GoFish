@@ -1303,6 +1303,48 @@
     root.append(card);
   }
 
+  /* ---- export every app spot (never the user's own) to a Simrad-ready GPX ----
+     Each waypoint name carries a "GBI" tag + type + depth, so on the plotter
+     they're instantly recognizable as from this app and told apart by kind. */
+  const EXPORT_TAG = { wreck: "WRK", artificial_reef: "REEF", barge: "REEF", tower: "REEF", rubble: "REEF",
+    reef_light: "REEF", ledge: "LEDGE", hard_bottom: "RISE", hole: "HOLE", spring: "SPRING",
+    fleet: "FLEET", oil_rig: "RIG", lump: "HUMP", deep_drop: "DEEP" };
+  const EXPORT_SYM = { WRK: "Shipwreck", REEF: "Reef", LEDGE: "Reef", RISE: "Reef", HOLE: "Reef",
+    SPRING: "Reef", FLEET: "Anchor", CSB: "Reef", RIG: "Circle", HUMP: "Reef", DEEP: "Reef", SPOT: "Reef" };
+  function gatherExportRows(respectFilters) {
+    const rows = [];
+    const clean = t => (t || "").replace(/\([^)]*\)/g, "").replace(/[^\w .#\/-]+/g, " ").replace(/\s+/g, " ").trim();
+    const shorten = (str, max) => { let c = clean(str); if (c.length <= max) return c; c = c.slice(0, max); const sp = c.lastIndexOf(" "); return (sp > max * 0.5 ? c.slice(0, sp) : c).trim(); };
+    const depthOf = s => { const d = Scoring.avgDepth(s); return d != null ? Math.round(d) : null; };
+    const show = k => !respectFilters || catShown(k);
+    const add = (lat, lon, tag, depth, short) => {
+      let n = "GBI " + tag; if (depth) n += " " + depth;
+      if (short) { const sn = shorten(short, 16); if (sn) n += " " + sn; }
+      rows.push({ lat, lon, name: n.slice(0, 32).trim(), sym: EXPORT_SYM[tag] || "Reef",
+        depth_ft: depth, type: tag, notes: "via Gulf Bottom Intel" });
+    };
+    for (const s of DATA_SPOTS) {                    // curated + computed + CSB + fleet + focus
+      if (!inRegion(s)) continue;
+      const cat = spotCategory(s);
+      if (cat === "mine" || !show(cat)) continue;     // never export the user's own numbers
+      const named = cat === "wreck" || cat === "reef" || cat === "spring"; // only real-name spots carry a descriptor
+      add(s.lat, s.lon, s.csb ? "CSB" : (EXPORT_TAG[s.type] || "SPOT"), depthOf(s), named ? s.name : null);
+    }
+    if (state.region === "tampa" && show("field")) {  // the ~1,100-point reef/wreck field
+      for (const r of (window.REEFS_TAMPA || [])) add(r.lat, r.lon, "REEF", r.depth, r.name || r.county);
+      for (const w of (window.WRECKS_TAMPA || [])) add(w.lat, w.lon, "WRK", w.depth, w.name);
+    }
+    if (state.region === "venice" && show("platform"))
+      for (const r of (window.RIGS_VENICE || [])) add(r[0], r[1], "RIG", null, "#" + r[2]);
+    return rows;
+  }
+  function exportSimrad(respectFilters) {
+    const rows = gatherExportRows(respectFilters);
+    if (!rows.length) { toast("No spots to export — check your type filters"); return; }
+    Exporter.download("GulfBottomIntel-" + state.region + ".gpx", Exporter.toGPX(rows), "application/gpx+xml");
+    toast(rows.length + " GBI waypoints exported — copy the .gpx onto your Simrad SD card");
+  }
+
   function renderSpots(root) {
     // Import UIs fold away once you have data — the tab leads with what you
     // came for (your alignment list + the public spot browser).
@@ -1315,6 +1357,27 @@
     renderMyChartsCard(fold);
     root.append(fold);
     renderMySpotsList(root);
+
+    // Export to chartplotter — every app spot except the user's own
+    const expCard = el("div", "card");
+    expCard.append(el("h3", null, "Export to your Simrad / GPS"));
+    expCard.append(el("div", "muted small",
+      'A GPX file for your Simrad SD card (Files → Import). Every spot is named ' +
+      '<b>“GBI &lt;type&gt; &lt;depth&gt;”</b> — wrecks (WRK), reefs (REEF), ledges (LEDGE), rises (RISE), holes (HOLE), ' +
+      'crowd-sonar (CSB), fleet spots (FLEET) — so on the plotter you can tell them apart from your own numbers at a glance. ' +
+      '<b>Your imported spots are never included.</b>'));
+    const allN = gatherExportRows(false).length, shownN = gatherExportRows(true).length;
+    const allBtn = el("button", "primary", "📤 Export all " + allN + " spots → Simrad GPX");
+    allBtn.onclick = () => exportSimrad(false);
+    expCard.append(allBtn);
+    if (shownN !== allN) {
+      const shownBtn = el("button", null, "📤 Only the types shown on the map (" + shownN + ")");
+      shownBtn.title = "Exports just the spot types you have switched on in the map's Spot-types panel";
+      shownBtn.onclick = () => exportSimrad(true);
+      expCard.append(shownBtn);
+    }
+    root.append(expCard);
+
     const search = el("input"); search.id = "spotSearch"; search.placeholder = "Search public spots…"; search.type = "search";
     root.append(search);
 
@@ -1323,10 +1386,8 @@
       '<option value="score">Sort: today\'s score</option><option value="dist">Sort: distance</option><option value="depth">Sort: depth</option><option value="name">Sort: name</option>');
     sortSel.value = state.spotSort;
     sortSel.onchange = () => { state.spotSort = sortSel.value; renderTab(); };
-    const gpxBtn = el("button", null, "⬇ GPX");
-    const csvBtn = el("button", null, "⬇ CSV");
-    gpxBtn.title = "Export filtered spots as GPX waypoints for your chartplotter";
-    bar.append(sortSel, el("div", "spacer"), gpxBtn, csvBtn);
+    const csvBtn = el("button", null, "⬇ CSV (spreadsheet)");
+    bar.append(sortSel, el("div", "spacer"), csvBtn);
     root.append(bar);
 
     const listWrap = el("div");
@@ -1382,11 +1443,6 @@
       }
     }
     search.oninput = renderList;
-    gpxBtn.onclick = () => {
-      const rows = filtered().map(r => r.spot);
-      Exporter.download("gulf-bottom-intel.gpx", Exporter.toGPX(rows), "application/gpx+xml");
-      toast("GPX with " + rows.length + " waypoints downloaded");
-    };
     csvBtn.onclick = () => {
       const rows = filtered().map(r => r.spot);
       Exporter.download("gulf-bottom-intel.csv", Exporter.toCSV(rows), "text/csv");
