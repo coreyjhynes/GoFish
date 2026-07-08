@@ -1401,8 +1401,12 @@
   const EXPORT_TAG = { wreck: "WRK", artificial_reef: "REEF", barge: "REEF", tower: "REEF", rubble: "REEF",
     reef_light: "REEF", ledge: "LEDGE", hard_bottom: "RISE", hole: "HOLE", spring: "SPRING",
     fleet: "FLEET", oil_rig: "RIG", lump: "HUMP", deep_drop: "DEEP" };
-  const EXPORT_SYM = { WRK: "Shipwreck", REEF: "Reef", LEDGE: "Reef", RISE: "Reef", HOLE: "Reef",
-    SPRING: "Reef", FLEET: "Anchor", CSB: "Reef", RIG: "Circle", HUMP: "Reef", DEEP: "Reef", SPOT: "Reef" };
+  // Icons Simrad/Navico actually recognizes on GPX import (others become a blank X).
+  // A distinct symbol/color per type so GBI spots stand out from your own waypoints
+  // and are told apart by kind on the plotter. "diamond,<color>" is a supported form.
+  const EXPORT_SYM = { WRK: "Shipwreck", REEF: "diamond,yellow", LEDGE: "diamond,green",
+    RISE: "diamond,green", HOLE: "diamond,blue", SPRING: "diamond,blue", CSB: "diamond,red",
+    FLEET: "bigfish", RIG: "cross,blue", HUMP: "diamond,green", DEEP: "diamond,red", SPOT: "diamond,yellow" };
   function gatherExportRows(respectFilters) {
     const rows = [];
     const clean = t => (t || "").replace(/\([^)]*\)/g, "").replace(/[^\w .#\/-]+/g, " ").replace(/\s+/g, " ").trim();
@@ -1412,15 +1416,16 @@
     const add = (lat, lon, tag, depth, short) => {
       let n = "GBI " + tag; if (depth) n += " " + depth;
       if (short) { const sn = shorten(short, 16); if (sn) n += " " + sn; }
-      rows.push({ lat, lon, name: n.slice(0, 32).trim(), sym: EXPORT_SYM[tag] || "Reef",
+      rows.push({ lat, lon, name: n.slice(0, 32).trim(), sym: EXPORT_SYM[tag] || "diamond,yellow",
         depth_ft: depth, type: tag, notes: "via Gulf Bottom Intel" });
     };
     for (const s of DATA_SPOTS) {                    // curated + computed + CSB + fleet + focus
       if (!inRegion(s)) continue;
       const cat = spotCategory(s);
       if (cat === "mine" || !show(cat)) continue;     // never export the user's own numbers
-      const named = cat === "wreck" || cat === "reef" || cat === "spring"; // only real-name spots carry a descriptor
-      add(s.lat, s.lon, s.csb ? "CSB" : (EXPORT_TAG[s.type] || "SPOT"), depthOf(s), named ? s.name : null);
+      const named = (cat === "wreck" || cat === "reef" || cat === "spring") && !s.springish; // only real-name spots carry a descriptor
+      const tag = s.springish ? "SPRING" : s.csb ? "CSB" : (EXPORT_TAG[s.type] || "SPOT");
+      add(s.lat, s.lon, tag, depthOf(s), named ? s.name : null);
     }
     if (state.region === "tampa" && show("field")) {  // the ~1,100-point reef/wreck field
       for (const r of (window.REEFS_TAMPA || [])) add(r.lat, r.lon, "REEF", r.depth, r.name || r.county);
@@ -1456,8 +1461,11 @@
     expCard.append(el("div", "muted small",
       'A GPX file for your Simrad SD card (Files → Import). Every spot is named ' +
       '<b>“GBI &lt;type&gt; &lt;depth&gt;”</b> — wrecks (WRK), reefs (REEF), ledges (LEDGE), rises (RISE), holes (HOLE), ' +
-      'crowd-sonar (CSB), fleet spots (FLEET) — so on the plotter you can tell them apart from your own numbers at a glance. ' +
-      '<b>Your imported spots are never included.</b>'));
+      'crowd-sonar (CSB), fleet spots (FLEET) — and each type gets its own <b>Simrad icon/colour</b> (wreck = shipwreck, ' +
+      'reef = yellow diamond, spring/hole = blue, ledge/rise = green, crowd-sonar = red, fleet = fish) so they stand out ' +
+      'from your own waypoints at a glance. <b>Your imported spots are never included.</b> ' +
+      '<span class="muted">If a symbol imports as a blank “X”, your unit uses different icon names — send me a GPX exported ' +
+      'from your Simrad and I’ll match them exactly.</span>'));
     const allN = gatherExportRows(false).length, shownN = gatherExportRows(true).length;
     const allBtn = el("button", "primary", "📤 Export all " + allN + " spots → Simrad GPX");
     allBtn.onclick = () => exportSimrad(false);
