@@ -322,18 +322,20 @@ hr.thin { border: none; border-top: 1px solid var(--line); margin: 9px 0; }
 }
 
 /* spot range-ring labels */
-.ring-label.cyan { color: var(--accent); border-color: rgba(62, 198, 208, .45); }
+.ring-label.cyan { color: #8fe9f2; border-color: rgba(62, 198, 208, .8); }
 .ring-label {
   width: max-content;
   transform: translate(-50%, -50%);
-  background: rgba(15, 34, 49, .8);
-  color: var(--amber);
-  border: 1px solid rgba(244, 162, 89, .45);
+  background: rgba(10, 23, 34, .9);
+  color: #ffc879;
+  border: 1.5px solid rgba(244, 162, 89, .8);
   border-radius: 8px;
-  font-size: .66rem;
-  padding: 1px 7px;
+  font-size: .84rem;
+  font-weight: 700;
+  padding: 2px 9px;
   white-space: nowrap;
   pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
 }
 
 /* collapsible sections — reference material folds out of the way */

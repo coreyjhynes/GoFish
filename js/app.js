@@ -459,8 +459,8 @@
     for (let i = 1; i <= 4; i++) {
       const rMi = step * i;
       L.circle(spotRingCenter, {
-        radius: rMi * 1609.344, color: "#f4a259", weight: 1,
-        opacity: i === 4 ? 0.3 : 0.55, fill: false, dashArray: "4 6", interactive: false
+        radius: rMi * 1609.344, color: "#f4a259", weight: 2.5,
+        opacity: i === 4 ? 0.6 : 0.85, fill: false, dashArray: "8 7", interactive: false
       }).addTo(spotRingLayer);
       L.marker([spotRingCenter.lat + rMi / 69.0, spotRingCenter.lng], {
         icon: L.divIcon({ className: "ring-label", html: fmtMi(rMi), iconSize: null }),
@@ -550,7 +550,7 @@
     const L0 = launch();
     const degPerMiLon = 1 / (69.0 * Math.cos(L0.lat * Math.PI / 180));
     [20, 40, 60, 80].forEach(mi => {
-      L.circle([L0.lat, L0.lon], { radius: mi * 1609.344, color: "#3ec6d0", weight: 1, opacity: 0.45, fill: false, dashArray: "6 7" })
+      L.circle([L0.lat, L0.lon], { radius: mi * 1609.344, color: "#3ec6d0", weight: 2.5, opacity: 0.75, fill: false, dashArray: "9 7" })
         .bindTooltip(mi + " mi from " + L0.name.split(" (")[0], { permanent: false }).addTo(ringLayer);
       // permanent label on the offshore (west) side of each ring
       L.marker([L0.lat, L0.lon - mi * degPerMiLon], {
