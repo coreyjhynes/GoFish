@@ -49,7 +49,7 @@
   }
 
   /* ================= map ================= */
-  let map, heatLayer, spotLayer, zoneLayer, ringLayer, ringsGroup, fpMarker, chartGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas, depthGroup, depthLabels, layerCtl, structLayer, structCanvas, hardbottomGroup;
+  let map, heatLayer, spotLayer, zoneLayer, ringLayer, ringsGroup, fpMarker, chartGroup, trackGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas, depthGroup, depthLabels, layerCtl, structLayer, structCanvas, hardbottomGroup;
   let rulerMode = false, rulerPts = [], rulerLayer, rulerRubber, rulerTip;
 
   // Computed depth detail — the 10,353-point sounding lattice + marching-squares
@@ -136,6 +136,7 @@
     // so their tint is never muted; non-interactive so clicks fall through to spots.
     map.createPane("zones").style.zIndex = 450;
     chartGroup = L.layerGroup().addTo(map);   // user-imported chart overlays (under vectors/pins)
+    trackGroup = L.layerGroup().addTo(map);   // user-imported GPX tracks (display only)
     encGroup = L.layerGroup();                 // live NOAA ENC full chart (opt-in via layer control)
     contourGroup = L.layerGroup();             // ENC chart contours — opt-in; the computed layer covers the default view
     initDepthDetail();                         // computed sounding lattice + contours — ON by default
@@ -173,7 +174,7 @@
         "NOAA chart contours": contourGroup,
         "Shaded relief (BlueTopo)": bathyGroup,
         "Seagrass beds (FWC)": seagrassGroup,
-        "My charts": chartGroup, "Full NOAA chart (ENC)": encGroup },
+        "My charts": chartGroup, "My tracks": trackGroup, "Full NOAA chart (ENC)": encGroup },
       { collapsed: true }
     ).addTo(map);
 
@@ -1233,7 +1234,7 @@
     pasteWrap.append(ta, addBtn);
     card.append(pasteWrap);
 
-    const hint = el("div", "muted small", 'From <b>Google My Maps</b>: open your map → ⋮ menu (next to the title) → <b>Export to KML/KMZ</b> → Entire map → Download, then import the file here. Names like "AJ wreck 120ft" auto-tag species &amp; depth. Spots are saved in this browser and included in rankings, heatmap and GPX export.');
+    const hint = el("div", "muted small", 'From <b>Google My Maps</b>: open your map → ⋮ menu (next to the title) → <b>Export to KML/KMZ</b> → Entire map → Download, then import the file here. Names like "AJ wreck 120ft" auto-tag species &amp; depth. Spots are saved in this browser and included in rankings, heatmap and GPX export. Tracks in a GPX file come in too, as orange lines (layers control → My tracks).');
     card.append(hint);
 
     function handleResult(r) {
@@ -1244,21 +1245,37 @@
         return;
       }
       if (r.error) { toast("Import failed: " + r.error); return; }
-      if (!r.added && r.dup) {
+      if (!r.added && r.dup && !r.tracksAdded) {
         toast("Nothing new — all " + r.dup + " matching spots are already imported (search them by name)");
         return;
       }
       let msg = "Added " + r.added + " spot" + (r.added === 1 ? "" : "s");
+      if (r.tracksAdded) msg += " + " + r.tracksAdded + " track" + (r.tracksAdded === 1 ? "" : "s");
+      if (r.tracksDup) msg += " · " + r.tracksDup + " track" + (r.tracksDup === 1 ? "" : "s") + " already imported";
+      if (r.tracksError) msg += " · tracks failed: " + r.tracksError;
       if (r.dup) msg += " · " + r.dup + " duplicate" + (r.dup === 1 ? "" : "s") + " skipped";
       if (r.outOfArea) msg += " · " + r.outOfArea + " outside the Gulf box";
       if (r.skippedShapes) msg += " · " + r.skippedShapes + " lines/areas ignored";
       if (r.badLines) msg += " · " + r.badLines + " lines not understood";
       toast(msg);
-      if (r.added) refreshAll();
+      if (r.added || r.tracksAdded) refreshAll();
     }
 
     fileBtn.onclick = () => fileInp.click();
-    fileInp.onchange = async () => { if (fileInp.files[0]) handleResult(await UserSpots.importFile(fileInp.files[0])); fileInp.value = ""; };
+    fileInp.onchange = async () => {
+      const f = fileInp.files[0]; fileInp.value = "";
+      if (!f) return;
+      if (/\.gpx$/i.test(f.name)) toast("Reading " + f.name + "…");
+      const r = await UserSpots.importFile(f);
+      if (r && !r.error && /\.gpx$/i.test(f.name)) {
+        try {
+          const t = await UserTracks.importGPXText(await f.text(), f.name);
+          r.tracksAdded = t.added; r.tracksDup = t.dup;
+          if (t.added) await UserTracks.render(trackGroup);
+        } catch (e) { r.tracksError = e.message || String(e); }
+      }
+      handleResult(r);
+    };
     pasteBtn.onclick = () => { pasteWrap.style.display = pasteWrap.style.display === "none" ? "block" : "none"; ta.focus(); };
     addBtn.onclick = () => { if (ta.value.trim()) { handleResult(UserSpots.importText(ta.value)); ta.value = ""; } };
     linkBtn.onclick = async () => {
@@ -1342,6 +1359,34 @@
       "Works: StrikeLines <b>Google Earth (KMZ)</b> charts, any KML GroundOverlay, or <b>any chart screenshot</b> (Garmin screen, StrikeLines preview) calibrated with two corners. " +
       "Garmin/Navionics/Quickdraw card files are proprietary — can't be read by a browser; screenshot them instead. " +
       "Also try the free <b>NOAA ENC chart</b> layer (layers control, top-right of map). Charts stay on this device."));
+    root.append(card);
+  }
+
+  function renderMyTracksCard(root) {
+    const tracks = UserTracks.list();
+    if (!tracks.length) return;
+    const card = el("div", "card");
+    card.append(el("h3", null, "My tracks"));
+    const row = el("div", "flexrow");
+    row.append(el("span", "muted small", tracks.length + " saved · orange lines · toggle with layers control → My tracks"), el("div", "spacer"));
+    const clr = el("button", null, "🗑 Clear");
+    clr.onclick = async () => {
+      if (!confirm("Remove all " + tracks.length + " of your imported tracks?")) return;
+      await UserTracks.clearAll(); await UserTracks.render(trackGroup); renderTab(); toast("My tracks cleared");
+    };
+    row.append(clr);
+    card.append(row);
+    for (const t of tracks) {
+      const r = el("div", "spotrow");
+      const nm = el("div", "nm"); nm.textContent = "〰 " + t.name;
+      const sub = el("div", "sub", t.rawPoints.toLocaleString() + " points · added " + t.added);
+      const wrap = el("div", "sname"); wrap.append(nm, sub);
+      const del = el("button", null, "✕");
+      del.onclick = async (ev) => { ev.stopPropagation(); await UserTracks.removeTrack(t.id); await UserTracks.render(trackGroup); renderTab(); toast("Track removed"); };
+      r.append(wrap, del);
+      r.onclick = () => { if (!map.hasLayer(trackGroup)) trackGroup.addTo(map); map.fitBounds(UserTracks.bounds(t), { padding: [30, 30] }); };
+      card.append(r);
+    }
     root.append(card);
   }
 
@@ -1445,13 +1490,14 @@
   function renderSpots(root) {
     // Import UIs fold away once you have data — the tab leads with what you
     // came for (your alignment list + the public spot browser).
-    const hasData = window.USER_SPOTS.length || Charts.list().length;
+    const hasData = window.USER_SPOTS.length || Charts.list().length || UserTracks.list().length;
     const fold = el("details", "fold");
     if (!hasData) fold.open = true;
     fold.append(el("summary", null, "➕ Add my data — waypoints & sonar charts" +
-      (hasData ? ' <span class="muted small">(' + [USER_SPOTS.length ? USER_SPOTS.length + " spots" : "", Charts.list().length ? Charts.list().length + " charts" : ""].filter(Boolean).join(" · ") + ")</span>" : "")));
+      (hasData ? ' <span class="muted small">(' + [USER_SPOTS.length ? USER_SPOTS.length + " spots" : "", Charts.list().length ? Charts.list().length + " charts" : "", UserTracks.list().length ? UserTracks.list().length + " tracks" : ""].filter(Boolean).join(" · ") + ")</span>" : "")));
     renderImportCard(fold);
     renderMyChartsCard(fold);
+    renderMyTracksCard(fold);
     root.append(fold);
     renderMySpotsList(root);
 
@@ -1938,6 +1984,7 @@
     stage("render", () => refreshAll());
     stage("forecast", () => loadForecast());
     stage("charts", () => Charts.render(chartGroup).then(recs => { if (recs.length && state.tab === "spots") renderTab(); }));
+    stage("tracks", () => UserTracks.render(trackGroup).then(recs => { if (recs.length && state.tab === "spots") renderTab(); }));
     stage("mobile", () => initMobileUI());
     stage("locate", () => {
       const b = $("#locateBtn"); if (b) b.onclick = toggleLocate;

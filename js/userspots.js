@@ -161,6 +161,9 @@
 
   /* ---------------- GPX ---------------- */
   function parseGPX(xmlText, sourceLabel) {
+    // Tracks are read by UserTracks; drop them first so a big plotter export
+    // doesn't build a huge DOM just to find the waypoints.
+    xmlText = xmlText.replace(/<trk\b[\s\S]*?<\/trk>/g, "");
     const doc = new DOMParser().parseFromString(xmlText, "text/xml");
     if (doc.getElementsByTagName("parsererror").length) throw new Error("Could not parse the GPX file");
     const out = [];
