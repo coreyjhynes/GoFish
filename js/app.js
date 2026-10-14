@@ -136,7 +136,7 @@
     // so their tint is never muted; non-interactive so clicks fall through to spots.
     map.createPane("zones").style.zIndex = 450;
     chartGroup = L.layerGroup().addTo(map);   // user-imported chart overlays (under vectors/pins)
-    trackGroup = L.layerGroup().addTo(map);   // user-imported GPX tracks (display only)
+    trackGroup = L.layerGroup();               // user-imported GPX tracks (display only) — shown via Spot types → My tracks
     encGroup = L.layerGroup();                 // live NOAA ENC full chart (opt-in via layer control)
     contourGroup = L.layerGroup();             // ENC chart contours — opt-in; the computed layer covers the default view
     initDepthDetail();                         // computed sounding lattice + contours — ON by default
@@ -174,7 +174,7 @@
         "NOAA chart contours": contourGroup,
         "Shaded relief (BlueTopo)": bathyGroup,
         "Seagrass beds (FWC)": seagrassGroup,
-        "My charts": chartGroup, "My tracks": trackGroup, "Full NOAA chart (ENC)": encGroup },
+        "My charts": chartGroup, "Full NOAA chart (ENC)": encGroup },
       { collapsed: true }
     ).addTo(map);
 
@@ -361,6 +361,7 @@
     { key: "csb",      label: "Crowd-sonar (CSB)",     color: "#5ad17a", shape: "circle", glyph: "≈", dashed: true },
     { key: "loiter",   label: "Fleet activity (AIS)",  color: "#ff7a59", shape: "circle", glyph: "⚓" },
     { key: "mine",     label: "My spots",              color: "#ffd166", shape: "star",   glyph: "★" },
+    { key: "tracks",   label: "My tracks",             color: "#ff9f1c", shape: "circle", glyph: "〰" },
     { key: "field",    label: "Reef / wreck field",    color: "#c9a06a", shape: "dots",   glyph: "•" },
     { key: "platform", label: "Oil platforms",         color: "#aab4c0", shape: "dots",   glyph: "■" }
   ];
@@ -378,16 +379,17 @@
     return "reef"; // artificial_reef, barge, tower, rubble, reef_light, misc man-made
   }
   function loadSpotFilters() {
-    const def = { wreck: true, reef: true, ledge: true, spring: true, computed: true, csb: true, mine: true, field: false, platform: true };
+    const def = { wreck: true, reef: true, ledge: true, spring: true, computed: true, csb: true, mine: true, tracks: true, field: false, platform: true };
     try { return Object.assign(def, JSON.parse(localStorage.getItem("GBI_SPOT_FILTERS") || "{}")); }
     catch (e) { return def; }
   }
   function saveSpotFilters() { try { localStorage.setItem("GBI_SPOT_FILTERS", JSON.stringify(state.spotFilters)); } catch (e) { /* ignore */ } }
   function catShown(key) { return state.spotFilters[key] !== false; }
   function spotCounts() {
-    const c = { wreck: 0, reef: 0, ledge: 0, spring: 0, computed: 0, csb: 0, loiter: 0, mine: 0, field: 0, platform: 0 };
+    const c = { wreck: 0, reef: 0, ledge: 0, spring: 0, computed: 0, csb: 0, loiter: 0, mine: 0, tracks: 0, field: 0, platform: 0 };
     for (const s of DATA_SPOTS) if (inRegion(s)) c[spotCategory(s)]++;
     c.mine = (window.USER_SPOTS || []).length;
+    c.tracks = UserTracks.list().length;
     if (state.region === "tampa") c.field = (window.REEFS_TAMPA || []).length + (window.WRECKS_TAMPA || []).length;
     if (state.region === "venice") c.platform = (window.RIGS_VENICE || []).length;
     return c;
@@ -919,7 +921,7 @@
         e.stopPropagation();
         const v = a.dataset.a === "on";
         cats.forEach(c => state.spotFilters[c.key] = v);
-        saveSpotFilters(); buildSpotFilterPanel(); drawSpots(); drawStructure(); drawRigs();
+        saveSpotFilters(); buildSpotFilterPanel(); drawSpots(); drawStructure(); drawRigs(); drawTracks();
       });
       body.append(allRow);
       for (const c of cats) {
@@ -934,7 +936,7 @@
         cb.onchange = () => {
           state.spotFilters[c.key] = cb.checked; saveSpotFilters();
           row.classList.toggle("off", !cb.checked);
-          drawSpots(); drawStructure(); drawRigs();
+          drawSpots(); drawStructure(); drawRigs(); drawTracks();
         };
         body.append(row);
       }
@@ -945,6 +947,14 @@
     };
     ctl.addTo(map);
     spotFilterCtl = ctl;
+  }
+
+  // My tracks follow their Spot-types checkbox
+  function drawTracks() {
+    if (!map || !trackGroup) return;
+    const on = catShown("tracks");
+    if (on && !map.hasLayer(trackGroup)) trackGroup.addTo(map);
+    if (!on && map.hasLayer(trackGroup)) map.removeLayer(trackGroup);
   }
 
   function refreshHeat() {
@@ -1234,7 +1244,7 @@
     pasteWrap.append(ta, addBtn);
     card.append(pasteWrap);
 
-    const hint = el("div", "muted small", 'From <b>Google My Maps</b>: open your map → ⋮ menu (next to the title) → <b>Export to KML/KMZ</b> → Entire map → Download, then import the file here. Names like "AJ wreck 120ft" auto-tag species &amp; depth. Spots are saved in this browser and included in rankings, heatmap and GPX export. Tracks in a GPX file come in too, as orange lines (layers control → My tracks).');
+    const hint = el("div", "muted small", 'From <b>Google My Maps</b>: open your map → ⋮ menu (next to the title) → <b>Export to KML/KMZ</b> → Entire map → Download, then import the file here. Names like "AJ wreck 120ft" auto-tag species &amp; depth. Spots are saved in this browser and included in rankings, heatmap and GPX export. Tracks in a GPX file come in too, as orange lines (Spot types → My tracks).');
     card.append(hint);
 
     function handleResult(r) {
@@ -1368,11 +1378,11 @@
     const card = el("div", "card");
     card.append(el("h3", null, "My tracks"));
     const row = el("div", "flexrow");
-    row.append(el("span", "muted small", tracks.length + " saved · orange lines · toggle with layers control → My tracks"), el("div", "spacer"));
+    row.append(el("span", "muted small", tracks.length + " saved · orange lines · toggle in Spot types → My tracks"), el("div", "spacer"));
     const clr = el("button", null, "🗑 Clear");
     clr.onclick = async () => {
       if (!confirm("Remove all " + tracks.length + " of your imported tracks?")) return;
-      await UserTracks.clearAll(); await UserTracks.render(trackGroup); renderTab(); toast("My tracks cleared");
+      await UserTracks.clearAll(); await UserTracks.render(trackGroup); buildSpotFilterPanel(); renderTab(); toast("My tracks cleared");
     };
     row.append(clr);
     card.append(row);
@@ -1382,9 +1392,11 @@
       const sub = el("div", "sub", t.rawPoints.toLocaleString() + " points · added " + t.added);
       const wrap = el("div", "sname"); wrap.append(nm, sub);
       const del = el("button", null, "✕");
-      del.onclick = async (ev) => { ev.stopPropagation(); await UserTracks.removeTrack(t.id); await UserTracks.render(trackGroup); renderTab(); toast("Track removed"); };
+      del.onclick = async (ev) => { ev.stopPropagation(); await UserTracks.removeTrack(t.id); await UserTracks.render(trackGroup); buildSpotFilterPanel(); renderTab(); toast("Track removed"); };
       r.append(wrap, del);
-      r.onclick = () => { if (!map.hasLayer(trackGroup)) trackGroup.addTo(map); map.fitBounds(UserTracks.bounds(t), { padding: [30, 30] }); };
+      r.onclick = () => {
+        if (!catShown("tracks")) { state.spotFilters.tracks = true; saveSpotFilters(); buildSpotFilterPanel(); drawTracks(); }
+        map.fitBounds(UserTracks.bounds(t), { padding: [30, 30] }); };
       card.append(r);
     }
     root.append(card);
@@ -1725,7 +1737,7 @@
   }
 
   function refreshAll() {
-    drawRings(); drawSpots(); drawZones(); drawRigs(); drawStructure(); refreshHeat(); Trip.plot(); buildSpotFilterPanel(); renderTab();
+    drawRings(); drawSpots(); drawZones(); drawRigs(); drawStructure(); drawTracks(); refreshHeat(); Trip.plot(); buildSpotFilterPanel(); renderTab();
   }
 
   let toastTimer;
@@ -1984,7 +1996,7 @@
     stage("render", () => refreshAll());
     stage("forecast", () => loadForecast());
     stage("charts", () => Charts.render(chartGroup).then(recs => { if (recs.length && state.tab === "spots") renderTab(); }));
-    stage("tracks", () => UserTracks.render(trackGroup).then(recs => { if (recs.length && state.tab === "spots") renderTab(); }));
+    stage("tracks", () => UserTracks.render(trackGroup).then(recs => { drawTracks(); if (recs.length) { buildSpotFilterPanel(); if (state.tab === "spots") renderTab(); } }));
     stage("mobile", () => initMobileUI());
     stage("locate", () => {
       const b = $("#locateBtn"); if (b) b.onclick = toggleLocate;
