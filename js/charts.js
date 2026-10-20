@@ -207,7 +207,8 @@
     const k = Math.min(2, 4096 / Math.max(size.x, size.y));
     const url = ENC_BASE + service + "/MapServer/export?bbox=" + [sw.x, sw.y, ne.x, ne.y].join(",") +
       "&bboxSR=3857&imageSR=3857&size=" + Math.round(size.x * k) + "," + Math.round(size.y * k) +
-      "&format=png32&transparent=true&dpi=" + Math.round(ENC_TEXT_DPI * k) + "&f=image";
+      "&format=png32&transparent=true&dpi=" + Math.round(ENC_TEXT_DPI * k) +
+      "&layers=hide:" + SOUND[service].group + "&f=image";   // soundings come from soundingsRefresh, in feet
     const ov = L.imageOverlay(url, b, { opacity: 0.85, interactive: false });
     ov.once("load", () => {
       if (group._encCurrent && group.hasLayer(group._encCurrent)) group.removeLayer(group._encCurrent);
@@ -215,9 +216,63 @@
     });
     ov.once("error", () => { if (group.hasLayer(ov)) group.removeLayer(ov); });
     group.addLayer(ov);
+    soundingsRefresh(map, true);
   }
 
-  // Depth contour lines + soundings only (ENC sublayers), inverted to white via CSS.
+  /* ---- chart soundings in FEET. NOAA draws ENC soundings (Z, meters) into the
+     exported image with no units option, so both chart layers hide that sublayer and
+     the depths are drawn here from the sounding points instead. ---- */
+  const M2FT = 3.28084;
+  const SOUND = { enc_general: { layer: 50, group: 49 }, enc_coastal: { layer: 61, group: 60 }, enc_approach: { layer: 80, group: 79 } };
+  let sndLayer = null, sndSeq = 0, sndTimer = null;
+  function soundingsRefresh(map, on) {
+    if (!sndLayer) sndLayer = L.layerGroup();
+    clearTimeout(sndTimer);
+    if (!on) { sndSeq++; sndLayer.clearLayers(); if (map.hasLayer(sndLayer)) map.removeLayer(sndLayer); return; }
+    if (!map.hasLayer(sndLayer)) sndLayer.addTo(map);
+    sndTimer = setTimeout(() => loadSoundings(map), 150);   // both chart layers refresh on moveend — fetch once
+  }
+  function loadSoundings(map) {
+    const z = map.getZoom(), seq = ++sndSeq;
+    if (z < 10) { sndLayer.clearLayers(); return; }
+    const service = z >= 13 ? "enc_approach" : z >= 11 ? "enc_coastal" : "enc_general";
+    // ENC scale gate: a sounding's SCAMIN is the smallest-scale chart it belongs on.
+    // Half the current scale denominator = shown one zoom step early, as the old oversampled image did.
+    const scaleDen = 591657527.6 / Math.pow(2, z) * Math.cos(map.getCenter().lat * Math.PI / 180);
+    const where = encodeURIComponent("SCAMIN IS NULL OR SCAMIN >= " + Math.round(scaleDen / 2));
+    // encdirect intermittently answers "Could not find service" — retry twice before giving up
+    const q = (bb, tries = 3) => fetch(ENC_BASE + service + "/MapServer/" + SOUND[service].layer + "/query?where=" + where +
+      "&geometry=" + bb.join(",") + "&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects" +
+      "&outFields=Z&returnGeometry=true&outSR=4326&f=json").then(r => r.json()).then(d =>
+        d.error && tries > 1 && seq === sndSeq ? new Promise(res => setTimeout(res, 700)).then(() => q(bb, tries - 1)) : d);
+    const b = map.getBounds(), W = b.getWest(), S = b.getSouth(), E = b.getEast(), N = b.getNorth();
+    q([W, S, E, N]).then(d => {
+      // capped at the service's 1,000 records: re-ask in quarters so coverage stays even
+      if (!d.exceededTransferLimit) return d.features || [];
+      const mx = (W + E) / 2, my = (S + N) / 2;
+      return Promise.all([[W, S, mx, my], [mx, S, E, my], [W, my, mx, N], [mx, my, E, N]].map(q))
+        .then(parts => parts.flatMap(p => p.features || []));
+    }).then(feats => {
+      if (seq !== sndSeq) return;
+      sndLayer.clearLayers();
+      const taken = new Set();
+      let n = 0;
+      for (const f of feats) {
+        const zm = f.attributes && f.attributes.Z;
+        if (zm == null || !f.geometry) continue;
+        const ll = [f.geometry.y, f.geometry.x];
+        const p = map.latLngToContainerPoint(ll);
+        const cell = Math.floor(p.x / 46) + ":" + Math.floor(p.y / 26);   // declutter: one label per 46x26 px
+        if (taken.has(cell)) continue;
+        taken.add(cell);
+        L.marker(ll, { interactive: false, keyboard: false,
+          icon: L.divIcon({ className: "snd", html: "<span>" + Math.round(zm * M2FT) + "</span>", iconSize: null }) }).addTo(sndLayer);
+        if (++n >= 320) break;
+      }
+    }).catch(() => {});
+  }
+
+  // Depth contour lines only (ENC DepthsL sublayer), inverted to white via CSS; soundings in feet above.
   // Oversampled render (up to 3x, capped at the service's 4096px limit) for retina
   // sharpness. dpi scales with the oversample so sounding text lands ~1.25x its print
   // size instead of shrinking with the image (at dpi=96 a 3x render drew it 1/3 size —
@@ -227,7 +282,7 @@
     if (!map.hasLayer(group)) return;
     const z = map.getZoom();
     const service = z >= 13 ? "enc_approach" : z >= 11 ? "enc_coastal" : "enc_general";
-    const show = z >= 13 ? "106,79" : z >= 11 ? "80,60" : "63,49"; // DepthsL group, SoundingsP group
+    const show = z >= 13 ? "106" : z >= 11 ? "80" : "63"; // DepthsL group (SoundingsP drawn in feet by soundingsRefresh)
     const b = map.getBounds();
     const sw = L.CRS.EPSG3857.project(b.getSouthWest());
     const ne = L.CRS.EPSG3857.project(b.getNorthEast());
@@ -243,6 +298,7 @@
     });
     ov.once("error", () => { if (group.hasLayer(ov)) group.removeLayer(ov); });
     group.addLayer(ov);
+    soundingsRefresh(map, true);
   }
 
   // FWC/FWRI statewide seagrass habitat (photointerpreted beds: continuous vs patchy).
@@ -290,5 +346,5 @@
     group.addLayer(ov);
   }
 
-  window.Charts = { importChartFile, importImage, render, setOpacity, opacity, list, removeChart, clearAllCharts, encRefresh, contoursRefresh, seagrassRefresh, hardbottomRefresh };
+  window.Charts = { importChartFile, importImage, render, setOpacity, opacity, list, removeChart, clearAllCharts, encRefresh, contoursRefresh, soundingsRefresh, seagrassRefresh, hardbottomRefresh };
 })();

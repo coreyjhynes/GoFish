@@ -210,7 +210,12 @@
     const setMapTheme = () =>
       map.getContainer().classList.toggle("dark-base", satBase || map.hasLayer(bathyGroup));
     map.on("baselayerchange", e => { satBase = e.name === "Satellite"; setMapTheme(); });
-    map.on("overlayremove", e => { if (e.layer === bathyGroup) setMapTheme(); });
+    map.on("overlayremove", e => {
+      if (e.layer === bathyGroup) setMapTheme();
+      // feet soundings belong to whichever NOAA chart layer is still on
+      if (e.layer === encGroup || e.layer === contourGroup)
+        Charts.soundingsRefresh(map, map.hasLayer(encGroup) || map.hasLayer(contourGroup));
+    });
     setMapTheme();
 
     // Range rings follow the last-clicked spot and persist (toggle off via layer control); rescale on zoom
