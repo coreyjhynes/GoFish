@@ -195,6 +195,7 @@
   /* ---------------- NOAA ENC live chart ---------------- */
   // Dynamic ArcGIS export (the service isn't tile-cached). Re-renders on moveend.
   const ENC_BASE = "https://encdirect.noaa.gov/arcgis/rest/services/encdirect/";
+  const ENC_TEXT_DPI = 120; // per screen pixel: 96 = chart text at print size, 120 = 1.25x for readability
   function encRefresh(map, group) {
     if (!map.hasLayer(group)) return;
     const service = map.getZoom() >= 11 ? "enc_coastal" : "enc_general";
@@ -202,8 +203,11 @@
     const sw = L.CRS.EPSG3857.project(b.getSouthWest());
     const ne = L.CRS.EPSG3857.project(b.getNorthEast());
     const size = map.getSize();
+    // Render 2x for sharpness with dpi scaled to match, so chart text lands ~1.25x its print size
+    const k = Math.min(2, 4096 / Math.max(size.x, size.y));
     const url = ENC_BASE + service + "/MapServer/export?bbox=" + [sw.x, sw.y, ne.x, ne.y].join(",") +
-      "&bboxSR=3857&imageSR=3857&size=" + size.x + "," + size.y + "&format=png32&transparent=true&dpi=96&f=image";
+      "&bboxSR=3857&imageSR=3857&size=" + Math.round(size.x * k) + "," + Math.round(size.y * k) +
+      "&format=png32&transparent=true&dpi=" + Math.round(ENC_TEXT_DPI * k) + "&f=image";
     const ov = L.imageOverlay(url, b, { opacity: 0.85, interactive: false });
     ov.once("load", () => {
       if (group._encCurrent && group.hasLayer(group._encCurrent)) group.removeLayer(group._encCurrent);
@@ -214,9 +218,10 @@
   }
 
   // Depth contour lines + soundings only (ENC sublayers), inverted to white via CSS.
-  // Oversampled render (up to 3x, capped at the service's 4096px limit) shrinks the
-  // effective map scale so scale-gated soundings draw ~1.5 zoom levels earlier,
-  // and doubles as retina sharpening. Zoom ladder walks to finer ENC bands:
+  // Oversampled render (up to 3x, capped at the service's 4096px limit) for retina
+  // sharpness. dpi scales with the oversample so sounding text lands ~1.25x its print
+  // size instead of shrinking with the image (at dpi=96 a 3x render drew it 1/3 size —
+  // unreadable). Zoom ladder walks to finer ENC bands:
   // general offshore -> coastal -> approach charts inshore (densest soundings).
   function contoursRefresh(map, group) {
     if (!map.hasLayer(group)) return;
@@ -230,7 +235,7 @@
     const k = Math.min(3, 4096 / Math.max(size.x, size.y));
     const url = ENC_BASE + service + "/MapServer/export?bbox=" + [sw.x, sw.y, ne.x, ne.y].join(",") +
       "&bboxSR=3857&imageSR=3857&size=" + Math.round(size.x * k) + "," + Math.round(size.y * k) +
-      "&format=png32&transparent=true&dpi=96&layers=show:" + show + "&f=image";
+      "&format=png32&transparent=true&dpi=" + Math.round(ENC_TEXT_DPI * k) + "&layers=show:" + show + "&f=image";
     const ov = L.imageOverlay(url, b, { opacity: 0.85, interactive: false, className: "enc-invert" });
     ov.once("load", () => {
       if (group._cur && group.hasLayer(group._cur)) group.removeLayer(group._cur);

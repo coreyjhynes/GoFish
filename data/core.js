@@ -38,7 +38,22 @@ window.DATA_CORE = {
     { id: "fort_morgan", name: "Fort Morgan (Mobile Pass side)", region: "gulfshores", lat: 30.23155, lon: -88.01762,
       tideStation: "8734635", tideStationName: "Mobile Point (Fort Morgan)" },
     { id: "billy_goat_hole", name: "Billy Goat Hole (Dauphin Island)", region: "gulfshores", lat: 30.25157, lon: -88.08168,
-      tideStation: "8735180", tideStationName: "Dauphin Island" }
+      tideStation: "8735180", tideStationName: "Dauphin Island" },
+    /* Florida Panhandle next door — FWC Florida Boat Ramp Inventory (public, saltwater, open, trailer parking) */
+    { id: "big_lagoon", name: "Big Lagoon State Park (Perdido Key, FL)", region: "gulfshores", lat: 30.31181, lon: -87.42186,
+      tideStation: "8729909", tideStationName: "Big Lagoon" },
+    { id: "navy_point", name: "Navy Point (Pensacola, Bayou Grande)", region: "gulfshores", lat: 30.38078, lon: -87.28212,
+      tideStation: "8729840", tideStationName: "Pensacola" },
+    { id: "mahogany_mill", name: "Mahogany Mill (Pensacola, Bayou Chico)", region: "gulfshores", lat: 30.39976, lon: -87.24727,
+      tideStation: "8729840", tideStationName: "Pensacola" },
+    { id: "shoreline_park", name: "Shoreline Park (Gulf Breeze, FL)", region: "gulfshores", lat: 30.35146, lon: -87.17454,
+      tideStation: "8729806", tideStationName: "Fishing Bend, Santa Rosa Sound" },
+    { id: "navarre_beach", name: "Navarre Beach ramp (Navarre, FL)", region: "gulfshores", lat: 30.38343, lon: -86.86328,
+      tideStation: "8729678", tideStationName: "Navarre Beach" },
+    { id: "liza_jackson", name: "Liza Jackson Park (Fort Walton Beach, FL)", region: "gulfshores", lat: 30.40587, lon: -86.63814,
+      tideStation: "8729572", tideStationName: "Mary Esther, Santa Rosa Sound" },
+    { id: "joes_bayou", name: "Joe's Bayou (Destin, FL)", region: "gulfshores", lat: 30.41051, lon: -86.49119,
+      tideStation: "8729511", tideStationName: "East Pass (Destin)" }
   ],
   // Regions: each with its own map view, launches, distance reference and species focus.
   // Spots/zones carry a `region` field ('tampa' when absent).

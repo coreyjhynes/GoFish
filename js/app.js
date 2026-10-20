@@ -80,12 +80,12 @@
       interactive: false, keyboard: false,
       icon: L.divIcon({ className: cls, html: "<span>" + txt + "</span>", iconSize: null })
     }));
-    // sounding numbers — pick a decimation so ~350 fit the current viewport
+    // sounding numbers — pick a decimation so ~220 fit the current viewport (13px labels)
     const g = DEPTH_TAMPA;
     const rowsIn = Math.max(1, Math.ceil((N - S) / g.step));
     const colsIn = Math.max(1, Math.ceil((E - W) / g.step));
     let every = 1;
-    while (Math.ceil(rowsIn / every) * Math.ceil(colsIn / every) > 350) every++;
+    while (Math.ceil(rowsIn / every) * Math.ceil(colsIn / every) > 220) every++;
     let n = 0;
     for (let r = 0; r < g.rows && n < 500; r += every)
       for (let c = 0; c < g.cols && n < 500; c += every) {
