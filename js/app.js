@@ -976,7 +976,7 @@
     pendingRingName = title;
     const dist = Scoring.haversineMi(ref.lat, ref.lon, o.lat, o.lon).toFixed(0);
     const badges = kind === "reef"
-      ? '<span class="badge type">Artificial reef</span> <span class="badge gA">' + regionField().reefSrc + "</span>"
+      ? '<span class="badge type">Artificial reef</span> <span class="badge gA">' + (o.src || regionField().reefSrc) + "</span>"
       : '<span class="badge type">' + (o.kind === "wreck" ? "Wreck" : "Obstruction") + '</span> <span class="badge gA">NOAA ENC</span>';
     const body = kind === "reef"
       ? [o.depth ? o.depth + " ft" : "", o.relief ? Math.round(o.relief) + " ft relief" : "", o.mat, o.county ? o.county + " Co." : "", o.yr].filter(Boolean).join(" · ") +
