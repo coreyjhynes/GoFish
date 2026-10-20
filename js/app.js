@@ -239,6 +239,7 @@
 
     // Right-click: in ruler mode undo the last point; else zone info / dropped pin
     map.on("contextmenu", e => {
+      if (areaMode) { L.DomEvent.preventDefault(e); toggleArea(); return; }
       if (rulerMode) { L.DomEvent.preventDefault(e); rulerPts.pop(); drawRuler(); return; }
       const z = zoneAt(e.latlng);
       if (z) openTargetPopup(z, true, e.latlng);
@@ -248,6 +249,7 @@
     // Left-click: in ruler mode drop a measurement point (snapped to a nearby spot);
     // else forgiving snap to the nearest spot within 14 px.
     map.on("click", e => {
+      if (areaMode) { areaClick(e.latlng); return; }
       if (rulerMode) { addRulerPoint(e.latlng); return; }
       const p = map.latLngToContainerPoint(e.latlng);
       let best = null, bestD = 14;
@@ -258,7 +260,7 @@
       }
       if (best) openTargetPopup(best, false, L.latLng(best.lat, best.lon));
     });
-    map.on("mousemove", e => { if (rulerMode) updateRulerRubber(e.latlng); });
+    map.on("mousemove", e => { if (rulerMode) updateRulerRubber(e.latlng); if (areaMode) updateAreaRubber(e.latlng); });
 
     addSearchControl();
   }
@@ -279,6 +281,7 @@
     return null;
   }
   function toggleRuler() {
+    if (!rulerMode && areaMode) toggleArea();
     rulerMode = !rulerMode;
     const btn = $("#rulerBtn");
     if (btn) btn.classList.toggle("on", rulerMode);
@@ -286,6 +289,83 @@
     if (rulerMode) toast("📏 Ruler on — tap points to measure. Right-click undoes the last, Esc or 📏 finishes.");
     else clearRuler();
   }
+  /* ---- area export: tap two opposite corners, then download every spot shown
+     inside the box (Spot-types filters apply) as a plotter GPX ---- */
+  let areaMode = false, areaStart = null, areaBounds = null, areaLayer = null, areaRubber = null;
+  const AREA_STYLE = { pane: "ruler", color: "#2ec4b6", weight: 2, dashArray: "6 5", fillColor: "#2ec4b6", fillOpacity: 0.08, interactive: false };
+  function toggleArea() {
+    if (!areaMode && rulerMode) toggleRuler();
+    areaMode = !areaMode;
+    const btn = $("#areaBtn");
+    if (btn) btn.classList.toggle("on", areaMode);
+    if (map) map.getContainer().style.cursor = areaMode ? "crosshair" : "";
+    clearArea();
+    if (areaMode) toast("▭ Tap two opposite corners of the area to export. Esc, right-click or ▭ cancels.");
+  }
+  function clearArea() {
+    areaStart = areaBounds = areaRubber = null;
+    if (areaLayer) areaLayer.clearLayers();
+    if (map) map.closePopup();
+  }
+  function areaClick(latlng) {
+    if (!areaLayer) areaLayer = L.layerGroup().addTo(map);
+    if (!areaStart || areaBounds) {                // first corner (or start over)
+      clearArea();
+      areaStart = latlng;
+      L.circleMarker(latlng, { pane: "ruler", radius: 4, color: "#2ec4b6", weight: 2, fillColor: "#0b2333", fillOpacity: 1, interactive: false }).addTo(areaLayer);
+      return;
+    }
+    areaBounds = L.latLngBounds(areaStart, latlng);
+    areaLayer.clearLayers(); areaRubber = null;
+    L.rectangle(areaBounds, AREA_STYLE).addTo(areaLayer);
+    openAreaPopup();
+  }
+  function updateAreaRubber(latlng) {
+    if (!areaStart || areaBounds) return;
+    const b = L.latLngBounds(areaStart, latlng);
+    if (areaRubber) areaRubber.setBounds(b);
+    else areaRubber = L.rectangle(b, Object.assign({}, AREA_STYLE, { fillOpacity: 0.04 })).addTo(areaLayer);
+  }
+  function areaRows(bounds, withMine) {
+    const rows = gatherExportRows(true).filter(r => bounds.contains([r.lat, r.lon]));
+    if (withMine)
+      for (const s of (window.USER_SPOTS || []))
+        if (bounds.contains([s.lat, s.lon]))
+          rows.push({ lat: s.lat, lon: s.lon, name: s.name, depth_ft: s.depth_ft, type: "user", sym: "Flag", notes: s.notes });
+    return rows;
+  }
+  function openAreaPopup() {
+    const b = areaBounds;
+    const mine = (window.USER_SPOTS || []).filter(s => b.contains([s.lat, s.lon])).length;
+    const box = el("div", "areaPop");
+    const head = el("div");
+    const cbLab = el("label", "small");
+    const cb = el("input"); cb.type = "checkbox";
+    cbLab.append(cb, document.createTextNode(" Include my spots (" + mine + ")"));
+    if (!mine) cb.disabled = true;
+    const btn = el("button", "primary", "⤓ Download GPX");
+    const cancel = el("button", null, "✕");
+    const count = () => {
+      const n = areaRows(b, cb.checked).length;
+      head.innerHTML = "<b>" + n + " number" + (n === 1 ? "" : "s") + "</b> in this area" +
+        '<div class="muted small">Follows your Spot types filters · ' + Exporter.ddm(b.getNorth(), true) + " to " + Exporter.ddm(b.getSouth(), true) + "</div>";
+      btn.disabled = !n;
+    };
+    cb.onchange = count;
+    btn.onclick = () => {
+      const rows = areaRows(b, cb.checked);
+      if (!rows.length) return;
+      Exporter.download("GulfBottomIntel-" + state.region + "-area.gpx", Exporter.toGPX(rows), "application/gpx+xml");
+      toast(rows.length + " waypoints exported — copy the .gpx onto your plotter's SD card");
+      toggleArea();
+    };
+    cancel.onclick = () => toggleArea();
+    const row = el("div", "flexrow"); row.append(btn, el("div", "spacer"), cancel);
+    box.append(head, cbLab, row);
+    count();
+    L.popup({ closeOnClick: false, autoClose: false, className: "areaPopup" }).setLatLng(b.getCenter()).setContent(box).openOn(map);
+  }
+
   function clearRuler() { rulerPts = []; rulerRubber = rulerTip = null; if (rulerLayer) rulerLayer.clearLayers(); }
   function addRulerPoint(latlng) {
     const p = map.latLngToContainerPoint(latlng);
@@ -2001,7 +2081,8 @@
     stage("locate", () => {
       const b = $("#locateBtn"); if (b) b.onclick = toggleLocate;
       const r = $("#rulerBtn"); if (r) r.onclick = toggleRuler;
-      document.addEventListener("keydown", e => { if (e.key === "Escape" && rulerMode) toggleRuler(); });
+      const a = $("#areaBtn"); if (a) a.onclick = toggleArea;
+      document.addEventListener("keydown", e => { if (e.key === "Escape" && rulerMode) toggleRuler(); if (e.key === "Escape" && areaMode) toggleArea(); });
     });
     App.map = map; App.chartGroup = chartGroup; App.encGroup = encGroup;
   }
