@@ -52,25 +52,29 @@
   let map, heatLayer, spotLayer, zoneLayer, ringLayer, ringsGroup, fpMarker, chartGroup, trackGroup, encGroup, contourGroup, tripLayer, spotRingLayer, seagrassGroup, rigLayer, rigCanvas, depthGroup, depthLabels, layerCtl, structLayer, structCanvas, hardbottomGroup;
   let rulerMode = false, rulerPts = [], rulerLayer, rulerRubber, rulerTip;
 
-  // Computed depth detail — the 10,353-point sounding lattice + marching-squares
-  // contours harvested from NOAA's DEM into data/depth_tampa.js. Pure vectors, so
+  // Computed depth detail — sounding lattices + marching-squares contours harvested
+  // from NOAA's DEM into data/depth_<region>.js (tools/bottom). Pure vectors, so
   // unlike the ENC chart layers there is no scale gating: contours draw at every
   // zoom, and depth numbers/labels redraw per viewport (decimated to stay legible).
+  // Every region's set loads at once — they don't overlap, the viewport picks.
+  function depthSets() {
+    return [[window.DEPTH_TAMPA, window.CONTOURS_TAMPA], [window.DEPTH_GULFSHORES, window.CONTOURS_GULFSHORES]]
+      .filter(s => s[0] || s[1]).map(s => ({ grid: s[0], contours: s[1] || [] }));
+  }
   function initDepthDetail() {
     depthLabels = L.layerGroup();
     depthGroup = L.layerGroup([depthLabels]).addTo(map);
-    if (!window.CONTOURS_TAMPA) return;
     const maj = ft => ft % 60 === 0; // emphasize 60/120/180 — 120 ft is the Feb–Mar SWG closure line
-    CONTOURS_TAMPA.forEach(c => c.paths.forEach(path =>
+    depthSets().forEach(set => set.contours.forEach(c => c.paths.forEach(path =>
       depthGroup.addLayer(L.polyline(path, {
         className: maj(c.ft) ? "cline maj" : "cline", // stroke color lives in CSS → follows base theme
         color: maj(c.ft) ? "#05505f" : "#0b6b7e", weight: maj(c.ft) ? 1.9 : 1.2,
         opacity: maj(c.ft) ? 0.9 : 0.7, interactive: false, smoothFactor: 1.25
-      }))));
+      })))));
   }
 
   function depthRefresh() {
-    if (!map || !depthGroup || !map.hasLayer(depthGroup) || !window.DEPTH_TAMPA) return;
+    if (!map || !depthGroup || !map.hasLayer(depthGroup)) return;
     depthLabels.clearLayers();
     const z = map.getZoom();
     if (z < 8) return; // regional overview: contours only, no number clutter
@@ -80,26 +84,30 @@
       interactive: false, keyboard: false,
       icon: L.divIcon({ className: cls, html: "<span>" + txt + "</span>", iconSize: null })
     }));
-    // sounding numbers — pick a decimation so ~220 fit the current viewport (13px labels)
-    const g = DEPTH_TAMPA;
-    const rowsIn = Math.max(1, Math.ceil((N - S) / g.step));
-    const colsIn = Math.max(1, Math.ceil((E - W) / g.step));
-    let every = 1;
-    while (Math.ceil(rowsIn / every) * Math.ceil(colsIn / every) > 220) every++;
-    let n = 0;
-    for (let r = 0; r < g.rows && n < 500; r += every)
-      for (let c = 0; c < g.cols && n < 500; c += every) {
-        const d = g.d[r * g.cols + c];
-        if (d < 6) continue;
-        const lat = g.lat0 + r * g.step, lon = g.lon0 + c * g.step;
-        if (lat < S || lat > N || lon < W || lon > E) continue;
-        lab(lat, lon, "snd", d);
-        n++;
+    let n = 0, m = 0;
+    for (const set of depthSets()) {
+      const g = set.grid;
+      if (g) {
+        // sounding numbers — pick a decimation so ~220 fit the current viewport (13px labels)
+        const rowsIn = Math.max(1, Math.ceil((N - S) / g.step));
+        const colsIn = Math.max(1, Math.ceil((E - W) / g.step));
+        let every = 1;
+        while (Math.ceil(rowsIn / every) * Math.ceil(colsIn / every) > 220) every++;
+        for (let r = 0; r < g.rows && n < 500; r += every) {
+          const lat = g.lat0 + r * g.step;
+          if (lat < S || lat > N) continue;
+          for (let c = 0; c < g.cols && n < 500; c += every) {
+            const d = g.d[r * g.cols + c];
+            if (d < 6) continue;
+            const lon = g.lon0 + c * g.step;
+            if (lon < W || lon > E) continue;
+            lab(lat, lon, "snd", d);
+            n++;
+          }
+        }
       }
-    // contour depth labels at path midpoints
-    if (window.CONTOURS_TAMPA) {
-      let m = 0;
-      CONTOURS_TAMPA.forEach(c => c.paths.forEach(path => {
+      // contour depth labels at path midpoints
+      set.contours.forEach(c => c.paths.forEach(path => {
         if (m >= 70 || path.length < 4) return;
         const mid = path[Math.floor(path.length / 2)];
         if (mid[0] < S || mid[0] > N || mid[1] < W || mid[1] > E) return;
@@ -845,10 +853,16 @@
      DATA_SPOTS so they rank, feed the heatmap, feed My-Spots alignment, and are
      searchable — but graded B/C with no report boost, so proven curated spots
      always outrank them. They read as "worth idling over," not "go here." */
-  function speciesForDepth(d, kind, top) {
+  function speciesForDepth(d, kind, top, region) {
     d = d || 90;
     let list;
-    if (d < 70)       list = kind === "hole" ? ["gag_grouper","red_grouper","mangrove_snapper","lane_snapper"]
+    if (region === "gulfshores") {           // Alabama / NW Florida shelf: red snapper first
+      if (d < 70)       list = ["red_snapper","gray_triggerfish","mangrove_snapper","lane_snapper"];
+      else if (d < 130) list = ["red_snapper","gray_triggerfish","vermilion_snapper","mangrove_snapper","amberjack"];
+      else if (d < 260) list = ["red_snapper","vermilion_snapper","amberjack","scamp","gray_triggerfish"];
+      else              list = ["vermilion_snapper","scamp","amberjack","red_snapper"];
+    }
+    else if (d < 70)       list = kind === "hole" ? ["gag_grouper","red_grouper","mangrove_snapper","lane_snapper"]
                                               : ["gag_grouper","mangrove_snapper","red_grouper","lane_snapper"];
     else if (d < 120) list = ["red_grouper","gag_grouper","red_snapper","mangrove_snapper","scamp"];
     else if (d < 200) list = ["red_snapper","scamp","red_grouper","amberjack","vermilion_snapper"];
@@ -857,9 +871,23 @@
     list.forEach((sp, i) => { m[sp] = i === 0 ? top : i === 1 ? Math.max(1, top - 1) : Math.max(1, top - 2); });
     return m;
   }
+  // Per-region computed layers (tools/bottom). springs: the "possible spring" flag only
+  // makes sense on Florida's karst shelf. idp keeps Tampa's original ids unchanged.
+  function bottomSets() {
+    return [
+      { region: "tampa", idp: "", springs: true, ledges: window.LEDGES_TAMPA, csb: window.CSB_ANOMALIES_TAMPA,
+        focusDem: window.FOCUS_DEM_TAMPA, focusCsb: window.FOCUS_CSB_TAMPA, ais: window.AIS_LOITER_TAMPA },
+      { region: "gulfshores", idp: "gs_", springs: false, ledges: window.LEDGES_GULFSHORES, csb: window.CSB_ANOMALIES_GULFSHORES,
+        ais: window.AIS_LOITER_GULFSHORES }
+    ];
+  }
   function buildComputedSpots() {
-    if (!window.LEDGES_TAMPA || window.__computedBuilt) return;
+    if (window.__computedBuilt) return;
     window.__computedBuilt = true;
+    bottomSets().forEach(buildComputedFor);
+  }
+  function buildComputedFor(B) {
+    const R = B.region;
     // dedup: focus-band finds are skipped if they sit on top of a shelf-wide find
     const pushed = [];
     const near = (la, lo) => pushed.some(p => Math.pow((p.lat - la) * 69, 2) + Math.pow((p.lon - lo) * 60.8, 2) < 0.35 * 0.35);
@@ -868,7 +896,7 @@
       if (focus && near(f.lat, f.lon)) return;
       // A deep, isolated, steep-rimmed hole = the bathymetric signature of a WFL
       // submarine spring/sinkhole. Flag the strongest holes as probable springs.
-      const springish = kind === "hole" && Math.abs(f.resid) >= 12 && f.depth >= 45 && f.depth <= 280;
+      const springish = B.springs && kind === "hole" && Math.abs(f.resid) >= 12 && f.depth >= 45 && f.depth <= 280;
       const type = springish ? "spring" : (kind === "ledge" ? "ledge" : kind === "hole" ? "hole" : "hard_bottom");
       const top = springish ? 3 : (f.relief >= 30 ? 4 : f.relief >= 18 ? 3 : 2);
       const kn = springish ? "Possible spring" : (kind === "ledge" ? "Ledge" : kind === "hole" ? "Hole" : "Hard-bottom rise");
@@ -878,9 +906,9 @@
                 : kind === "ledge" ? "a steep drop-off (~" + f.slope + " ft/mi) with " + Math.round(f.relief) + " ft of relief"
                 : "hard bottom standing ~" + Math.round(Math.abs(f.resid)) + " ft above the surrounding sand";
       DATA_SPOTS.push({
-        id: (focus ? "fdem_" : "cmp_") + kind + i, name, lat: f.lat, lon: f.lon, depth_ft: f.depth,
-        relief_ft: Math.round(f.relief), type, grade: f.grade, region: "tampa", computed: true, springish: springish || undefined,
-        species: speciesForDepth(f.depth, kind, top),
+        id: B.idp + (focus ? "fdem_" : "cmp_") + kind + i, name, lat: f.lat, lon: f.lon, depth_ft: f.depth,
+        relief_ft: Math.round(f.relief), type, grade: f.grade, region: R, computed: true, springish: springish || undefined,
+        species: speciesForDepth(f.depth, kind, top, R),
         notes: "Computed from NOAA DEM terrain analysis — " + how + "." +
           (springish ? " Flagged a probable spring by its shape (deep, isolated). Deep springs don't show on satellite surface temperature, so confirm on your sounder — watch for a thermocline or color change." : "") +
           (focus ? " High-detail pass over the 40–60 mi band N of the pipeline." : "") +
@@ -897,14 +925,14 @@
       const crowd = Math.round(f.depth - f.anom);
       const diff = Math.abs(Math.round(f.anom));
       // an uncharted deep hole the crowd found = strong spring candidate
-      const springish = f.kind === "hole" && diff >= 14 && crowd >= 45 && crowd <= 300;
+      const springish = B.springs && f.kind === "hole" && diff >= 14 && crowd >= 45 && crowd <= 300;
       const type = springish ? "spring" : (f.kind === "rise" ? "hard_bottom" : "hole");
       const top = diff >= 25 ? 4 : diff >= 16 ? 3 : 2;
       DATA_SPOTS.push({
-        id: (focus ? "fcsb_" : "csb_") + i,
+        id: B.idp + (focus ? "fcsb_" : "csb_") + i,
         name: springish ? "Possible spring " + crowd + " ft" : ((f.kind === "rise" ? "Crowd-sonar rise " : "Crowd-sonar hole ") + crowd + " ft"),
-        lat: f.lat, lon: f.lon, depth_ft: crowd, type, grade: f.grade, region: "tampa", computed: true, csb: true, springish: springish || undefined,
-        species: speciesForDepth(crowd, f.kind, top),
+        lat: f.lat, lon: f.lon, depth_ft: crowd, type, grade: f.grade, region: R, computed: true, csb: true, springish: springish || undefined,
+        species: speciesForDepth(crowd, f.kind, top, R),
         notes: springish
           ? f.tracks + " crowd-sonar tracks read this " + diff + " ft deeper than the chart — an uncharted deep hole with the shape of a submarine spring/sinkhole. Deep springs don't show on satellite surface temperature; confirm on your sounder. (NOAA DCDB.)"
           : f.tracks + " independent crowd-sonar tracks read " + diff + " ft " +
@@ -916,32 +944,32 @@
     };
 
     // Shelf-wide passes first (they own their territory)
-    const L = window.LEDGES_TAMPA;
+    const L = B.ledges || {};
     (L.rises || []).forEach((f, i) => add(f, "rise", i));
     (L.ledges || []).forEach((f, i) => add(f, "ledge", i));
     (L.holes || []).forEach((f, i) => add(f, "hole", i));
-    (window.CSB_ANOMALIES_TAMPA || []).forEach((f, i) => addCSB(f, i));
+    (B.csb || []).forEach((f, i) => addCSB(f, i));
 
     // Focused 40–60 mi band, high-detail pass — adds the subtler structure the
     // shelf-wide scan missed; deduped against everything above.
-    const F = window.FOCUS_DEM_TAMPA;
+    const F = B.focusDem;
     if (F) {
       (F.rises || []).forEach((f, i) => add(f, "rise", 900 + i, true));
       (F.ledges || []).forEach((f, i) => add(f, "ledge", 900 + i, true));
       (F.holes || []).forEach((f, i) => add(f, "hole", 900 + i, true));
     }
-    (window.FOCUS_CSB_TAMPA || []).forEach((f, i) => addCSB(f, 900 + i, true));
+    (B.focusCsb || []).forEach((f, i) => addCSB(f, 900 + i, true));
 
     // AIS fleet-activity loiter spots: where slow-speed fishing/charter vessels held
     // station. A behavioral signal (boats actually fish here), independent of the
     // bathymetry — so NOT deduped; a loiter pin on top of a reef is corroboration.
-    (window.AIS_LOITER_TAMPA || []).forEach((f, i) => {
+    (B.ais || []).forEach((f, i) => {
       const d = f.depth || 90;
       const top = f.vessels >= 3 ? 4 : f.vessels >= 2 ? 3 : 2;
       DATA_SPOTS.push({
-        id: "ais_" + i, name: "Fleet spot" + (f.depth ? " " + f.depth + " ft" : "") + " · " + f.vessels + (f.vessels === 1 ? " boat" : " boats"),
-        lat: f.lat, lon: f.lon, depth_ft: d, type: "fleet", grade: f.grade, region: "tampa", loiter: true,
-        species: speciesForDepth(d, "rise", top),
+        id: B.idp + "ais_" + i, name: "Fleet spot" + (f.depth ? " " + f.depth + " ft" : "") + " · " + f.vessels + (f.vessels === 1 ? " boat" : " boats"),
+        lat: f.lat, lon: f.lon, depth_ft: d, type: "fleet", grade: f.grade, region: R, loiter: true,
+        species: speciesForDepth(d, "rise", top, R),
         notes: (f.vessels >= 2
           ? f.vessels + " independent AIS fishing/charter vessels held station here across " + f.days + " different days"
           : "An AIS fishing/charter vessel held station here (" + f.pts + " slow-speed fixes over " + f.days + " day" + (f.days === 1 ? "" : "s") + ")") +
