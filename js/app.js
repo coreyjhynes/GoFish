@@ -465,13 +465,25 @@
   }
   function saveSpotFilters() { try { localStorage.setItem("GBI_SPOT_FILTERS", JSON.stringify(state.spotFilters)); } catch (e) { /* ignore */ } }
   function catShown(key) { return state.spotFilters[key] !== false; }
+  // Region structure layers: the official reef/wreck field and the platform field
+  function regionField() {
+    if (state.region === "tampa") return { reefs: window.REEFS_TAMPA || [], wrecks: window.WRECKS_TAMPA || [], reefSrc: "FWC" };
+    if (state.region === "gulfshores") return { reefs: window.REEFS_GULFSHORES || [], wrecks: window.WRECKS_GULFSHORES || [], reefSrc: "ADCNR" };
+    return { reefs: [], wrecks: [], reefSrc: "" };
+  }
+  function regionRigs() {
+    if (state.region === "venice") return window.RIGS_VENICE || [];
+    if (state.region === "gulfshores") return window.RIGS_GULFSHORES || [];
+    return [];
+  }
   function spotCounts() {
     const c = { wreck: 0, reef: 0, ledge: 0, spring: 0, computed: 0, csb: 0, loiter: 0, mine: 0, tracks: 0, field: 0, platform: 0 };
     for (const s of DATA_SPOTS) if (inRegion(s)) c[spotCategory(s)]++;
     c.mine = (window.USER_SPOTS || []).length;
     c.tracks = UserTracks.list().length;
-    if (state.region === "tampa") c.field = (window.REEFS_TAMPA || []).length + (window.WRECKS_TAMPA || []).length;
-    if (state.region === "venice") c.platform = (window.RIGS_VENICE || []).length;
+    const F = regionField();
+    c.field = F.reefs.length + F.wrecks.length;
+    c.platform = regionRigs().length;
     return c;
   }
 
@@ -805,11 +817,14 @@
   function drawRigs() {
     if (!rigLayer) return;
     rigLayer.clearLayers();
-    if (state.region !== "venice" || !window.RIGS_VENICE || !catShown("platform")) return;
+    const rigs = regionRigs();
+    if (!rigs.length || !catShown("platform")) return;
     if (!rigCanvas) rigCanvas = L.canvas({ padding: 0.3, tolerance: 6 });
-    for (const r of RIGS_VENICE) {
+    for (const r of rigs) {
       const la = r[0], lo = r[1], id = r[2], yr = r[3];
-      const label = "BOEM platform #" + id + (yr ? " · since " + yr : "");
+      // [lat, lon, id, year, source?] — source "NOAA chart" = charted state-water platform (no BOEM id)
+      const label = r[4] === "NOAA chart" ? "Charted platform" + (id ? " " + id : "") + " · NOAA chart"
+        : "BOEM platform #" + id + (yr ? " · since " + yr : "");
       const m = L.circleMarker([la, lo], {
         renderer: rigCanvas, radius: 3.5,
         color: "#22303d", weight: 1, fillColor: "#aab4c0", fillOpacity: 0.9
@@ -937,16 +952,17 @@
   function drawStructure() {
     if (!structLayer) return;
     structLayer.clearLayers();
-    if (state.region !== "tampa" || !catShown("field")) return;
+    const F = regionField();
+    if (!catShown("field") || !(F.reefs.length + F.wrecks.length)) return;
     if (!structCanvas) structCanvas = L.canvas({ padding: 0.3, tolerance: 6 });
-    for (const r of (window.REEFS_TAMPA || [])) {
+    for (const r of F.reefs) {
       const m = L.circleMarker([r.lat, r.lon], { renderer: structCanvas, radius: 3.4,
         color: "#3a2400", weight: 1, fillColor: "#f4a259", fillOpacity: 0.92 });
       onLeftClick(m, () => structPopup("reef", r));
       onRightClick(m, () => structPopup("reef", r));
       m.addTo(structLayer);
     }
-    for (const w of (window.WRECKS_TAMPA || [])) {
+    for (const w of F.wrecks) {
       const m = L.circleMarker([w.lat, w.lon], { renderer: structCanvas, radius: 3,
         color: "#12202c", weight: 1, fillColor: w.kind === "wreck" ? "#c9d4dc" : "#8798a4", fillOpacity: 0.9 });
       onLeftClick(m, () => structPopup("wreck", w));
@@ -960,7 +976,7 @@
     pendingRingName = title;
     const dist = Scoring.haversineMi(ref.lat, ref.lon, o.lat, o.lon).toFixed(0);
     const badges = kind === "reef"
-      ? '<span class="badge type">Artificial reef</span> <span class="badge gA">FWC</span>'
+      ? '<span class="badge type">Artificial reef</span> <span class="badge gA">' + regionField().reefSrc + "</span>"
       : '<span class="badge type">' + (o.kind === "wreck" ? "Wreck" : "Obstruction") + '</span> <span class="badge gA">NOAA ENC</span>';
     const body = kind === "reef"
       ? [o.depth ? o.depth + " ft" : "", o.relief ? Math.round(o.relief) + " ft relief" : "", o.mat, o.county ? o.county + " Co." : "", o.yr].filter(Boolean).join(" · ") +
@@ -1193,7 +1209,7 @@
     const regionalIds = new Set(regionObj().species);
     for (const sp of DATA_CORE.species.filter(s => regionalIds.has(s.id))) {
       const st = Scoring.isOpen(sp.id, d);
-      const reg = (window.DATA_REGS && DATA_REGS.species[sp.id]) || null;
+      const reg = Scoring.regs().species[sp.id] || null;
       if (st.open) {
         const bag = reg ? reg.bag.replace(/\s*\([^)]*\)/g, "") : "";
         const size = reg ? reg.size.replace(/\s*\([^)]*\)/g, "").replace("total length", "TL").replace("fork length", "FL") : "";
@@ -1564,12 +1580,13 @@
       const tag = s.springish ? "SPRING" : s.csb ? "CSB" : (EXPORT_TAG[s.type] || "SPOT");
       add(s.lat, s.lon, tag, depthOf(s), named ? s.name : null);
     }
-    if (state.region === "tampa" && show("field")) {  // the ~1,100-point reef/wreck field
-      for (const r of (window.REEFS_TAMPA || [])) add(r.lat, r.lon, "REEF", r.depth, r.name || r.county);
-      for (const w of (window.WRECKS_TAMPA || [])) add(w.lat, w.lon, "WRK", w.depth, w.name);
+    if (show("field")) {  // the region's official reef/wreck field (Tampa ~1,100 points)
+      const F = regionField();
+      for (const r of F.reefs) add(r.lat, r.lon, "REEF", r.depth, r.name || r.county);
+      for (const w of F.wrecks) add(w.lat, w.lon, "WRK", w.depth, w.name);
     }
-    if (state.region === "venice" && show("platform"))
-      for (const r of (window.RIGS_VENICE || [])) add(r[0], r[1], "RIG", null, "#" + r[2]);
+    if (show("platform"))
+      for (const r of regionRigs()) add(r[0], r[1], "RIG", null, r[4] === "NOAA chart" ? r[2] : "#" + r[2]);
     return rows;
   }
   function exportSimrad(respectFilters) {
@@ -1692,13 +1709,14 @@
   /* ================= SEASONS tab ================= */
   function renderSeasons(root) {
     const d = state.date;
-    root.append(el("div", "muted small", "Status shown for <b>" + fmtD(d) + "</b>, private recreational angler. Data compiled " + DATA_REGS.as_of + ". <b>Always verify before you keep fish.</b>"));
+    const REGS = Scoring.regs();
+    root.append(el("div", "muted small", "Status shown for <b>" + fmtD(d) + "</b>, private recreational angler" + (REGS.scope ? " — " + REGS.scope : "") + ". Data compiled " + REGS.as_of + ". <b>Always verify before you keep fish.</b>"));
 
     const regTable = ids => {
       const tbl = el("table", "regs");
       tbl.innerHTML = "<tr><th>Species</th><th>Today</th><th>2026 season</th><th>Bag / size</th></tr>";
       for (const id of ids) {
-        const reg = DATA_REGS.species[id];
+        const reg = REGS.species[id];
         const st = Scoring.isOpen(id, d);
         const tr = el("tr", st.open ? "" : "closedRow");
         const seasons = (reg.open && reg.open.length) ? reg.open.map(w => w.start.slice(5) + " → " + w.end.slice(5) + (w.note ? " (" + w.note + ")" : "")).join("<br>") : "Closed 2026";
@@ -1706,7 +1724,7 @@
           "<td>" + (st.open ? '<span class="badge open">OPEN</span>' : '<span class="badge closed">CLOSED</span>') + "</td>" +
           '<td class="small">' + seasons + "</td>" +
           '<td class="small">' + reg.bag + "<br>" + reg.size + (reg.agg ? '<br><span class="muted">' + reg.agg + "</span>" : "") +
-          (reg.url ? '<br><a href="' + reg.url + '" target="_blank" rel="noopener">FWC/NOAA rule ↗</a>' : "") + "</td>";
+          (reg.url ? '<br><a href="' + reg.url + '" target="_blank" rel="noopener">Official rule ↗</a>' : "") + "</td>";
         tbl.append(tr);
       }
       return tbl;
@@ -1714,7 +1732,7 @@
 
     // Your region's species up front; everything else folded away
     const mine = new Set(regionObj().species);
-    const all = Object.keys(DATA_REGS.species);
+    const all = Object.keys(REGS.species);
     const regionIds = all.filter(id => mine.has(id));
     const otherIds = all.filter(id => !mine.has(id));
 
@@ -1734,8 +1752,8 @@
 
     const g = el("div", "card");
     g.append(el("h3", null, "Gear & permits (federal Gulf reef fish)"));
-    g.append(el("ul", "small", DATA_REGS.gear.map(x => "<li>" + x.rule + (x.url ? ' <a href="' + x.url + '" target="_blank" rel="noopener">↗</a>' : "") + "</li>").join("")));
-    g.append(el("ul", "small", DATA_REGS.permits.map(x => "<li><b>" + x.name + "</b> — " + x.required_for + (x.url ? ' <a href="' + x.url + '" target="_blank" rel="noopener">↗</a>' : "") + "</li>").join("")));
+    g.append(el("ul", "small", REGS.gear.map(x => "<li>" + x.rule + (x.url ? ' <a href="' + x.url + '" target="_blank" rel="noopener">↗</a>' : "") + "</li>").join("")));
+    g.append(el("ul", "small", REGS.permits.map(x => "<li><b>" + x.name + "</b> — " + x.required_for + (x.url ? ' <a href="' + x.url + '" target="_blank" rel="noopener">↗</a>' : "") + "</li>").join("")));
     root.append(g);
   }
 

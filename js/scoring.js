@@ -17,8 +17,20 @@
   }
 
   /* ---------- regulations ---------- */
+  // Region-aware: a region may override species rules, gear and permits
+  // (DATA_REGS.byRegion — e.g. Alabama sets its own red snapper season).
+  function regs() {
+    const base = window.DATA_REGS || { species: {}, gear: [], permits: [] };
+    const o = (base.byRegion || {})[window.CURRENT_REGION || "tampa"];
+    if (!o) return base;
+    return Object.assign({}, base, {
+      as_of: o.as_of || base.as_of, scope: o.scope || base.scope,
+      species: Object.assign({}, base.species, o.species || {}),
+      gear: o.gear || base.gear, permits: o.permits || base.permits
+    });
+  }
   function isOpen(speciesId, date) {
-    const reg = (window.DATA_REGS && DATA_REGS.species[speciesId]) || null;
+    const reg = regs().species[speciesId] || null;
     if (!reg) return { open: true, known: false, note: "No regulation data" };
     if (!reg.open || !reg.open.length) return { open: false, known: true, note: "Closed all of 2026", reg };
     const ds = date.toISOString().slice(0, 10);
@@ -33,7 +45,7 @@
 
   // Shallow-water grouper closure: Feb 1 – Mar 31 seaward of 20 fathoms (~120 ft).
   function swgClosed(speciesId, date, depthFt) {
-    const reg = (window.DATA_REGS && DATA_REGS.species[speciesId]) || null;
+    const reg = regs().species[speciesId] || null;
     if (!reg || !reg.swg_closure || depthFt == null || depthFt <= 120) return false;
     const md = String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
     return md >= "02-01" && md <= "03-31";
@@ -476,5 +488,5 @@
     return { score, label, reasons: reasons.slice(0, 4) };
   }
 
-  window.Scoring = { haversineMi, isOpen, depthFit, scoreTarget, rankSpots, dayScore, heatPoints, speciesName, avgDepth, alignment, zoneContains, biteWindows };
+  window.Scoring = { haversineMi, regs, isOpen, depthFit, scoreTarget, rankSpots, dayScore, heatPoints, speciesName, avgDepth, alignment, zoneContains, biteWindows };
 })();

@@ -24,7 +24,21 @@ window.DATA_CORE = {
     { id: "islamorada", name: "Islamorada (Whale Harbor)", region: "keys", lat: 24.9400, lon: -80.6080,
       tideStation: "8723795", tideStationName: "Whale Harbor, Hawk Channel" },
     { id: "keywest", name: "Key West (Stock Island)", region: "keys", lat: 24.5670, lon: -81.7330,
-      tideStation: "8724580", tideStationName: "Key West" }
+      tideStation: "8724580", tideStationName: "Key West" },
+    /* Gulf Shores / Orange Beach, AL — ADCNR coastal boating-access ramps (Feb 2023 map file).
+       Perdido Pass ramps first: the usual run offshore. */
+    { id: "cotton_bayou", name: "Cotton Bayou (Orange Beach, near Perdido Pass)", region: "gulfshores", lat: 30.2718, lon: -87.58307,
+      tideStation: "8730667", tideStationName: "Alabama Point (Perdido Pass)" },
+    { id: "boggy_point", name: "Boggy Point (Orange Beach, inside Perdido Pass)", region: "gulfshores", lat: 30.28402, lon: -87.55473,
+      tideStation: "8730667", tideStationName: "Alabama Point (Perdido Pass)" },
+    { id: "the_launch_icw", name: "The Launch at the ICW (Orange Beach)", region: "gulfshores", lat: 30.29484, lon: -87.63507,
+      tideStation: "8730667", tideStationName: "Alabama Point (Perdido Pass)" },
+    { id: "canal_park", name: "Canal Park (Gulf Shores, ICW)", region: "gulfshores", lat: 30.27878, lon: -87.687,
+      tideStation: "8731269", tideStationName: "Gulf State Park Pier" },
+    { id: "fort_morgan", name: "Fort Morgan (Mobile Pass side)", region: "gulfshores", lat: 30.23155, lon: -88.01762,
+      tideStation: "8734635", tideStationName: "Mobile Point (Fort Morgan)" },
+    { id: "billy_goat_hole", name: "Billy Goat Hole (Dauphin Island)", region: "gulfshores", lat: 30.25157, lon: -88.08168,
+      tideStation: "8735180", tideStationName: "Dauphin Island" }
   ],
   // Regions: each with its own map view, launches, distance reference and species focus.
   // Spots/zones carry a `region` field ('tampa' when absent).
@@ -40,7 +54,12 @@ window.DATA_CORE = {
     { id: "keys", name: "Florida Keys (Marathon)", center: [24.72, -81.00], zoom: 9,
       fpBearing: 155, fpMiles: 20, defaultLaunch: "marathon",
       distanceRef: null, // Keys span 100+ mi — distances follow the selected launch
-      species: ["mahi", "blackfin_tuna", "wahoo", "swordfish", "yellowtail_snapper", "mangrove_snapper", "amberjack", "hogfish"] }
+      species: ["mahi", "blackfin_tuna", "wahoo", "swordfish", "yellowtail_snapper", "mangrove_snapper", "amberjack", "hogfish"] },
+    { id: "gulfshores", name: "Gulf Shores / Orange Beach, AL", center: [29.92, -87.82], zoom: 9,
+      fpBearing: 185, fpMiles: 20, defaultLaunch: "cotton_bayou",
+      // Perdido Pass jetties (midpoint of Lights 1 & 2, USCG Light List 2025)
+      distanceRef: { name: "Perdido Pass jetties", short: "Perdido Pass", lat: 30.2697, lon: -87.55741 },
+      species: ["red_snapper", "gray_triggerfish", "amberjack", "vermilion_snapper", "mangrove_snapper", "gag_grouper", "red_grouper", "scamp", "lane_snapper"] }
   ],
   species: [
     { id: "red_snapper",      name: "Red Snapper",        short: "Red Snap",  color: "#ff5a5f" },
